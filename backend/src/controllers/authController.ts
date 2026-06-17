@@ -4,6 +4,7 @@ import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { sendTokenCookies, clearTokenCookies } from '../utils/jwt';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { findUserByEmail, normalizeEmail } from '../utils/email';
 
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ const changePasswordSchema = z.object({
  * Creates the predefined admin account from .env if it doesn't already exist.
  */
 export const initAdminUser = async () => {
-  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminEmail = process.env.ADMIN_EMAIL ? normalizeEmail(process.env.ADMIN_EMAIL) : undefined;
   const adminPassword = process.env.ADMIN_PASSWORD;
   const adminName = process.env.ADMIN_NAME || 'Portal Admin';
 
@@ -41,7 +42,7 @@ export const initAdminUser = async () => {
   }
 
   try {
-    const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
+    const existing = await findUserByEmail(adminEmail);
     if (!existing) {
       const salt   = await bcrypt.genSalt(10);
       const hashed = await bcrypt.hash(adminPassword, salt);
@@ -62,9 +63,10 @@ export const initAdminUser = async () => {
 export const register = async (req: Request, res: Response) => {
   try {
     const validatedData = registerSchema.parse(req.body);
-    const { email, name, password } = validatedData;
+    const { name, password } = validatedData;
+    const email = normalizeEmail(validatedData.email);
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await findUserByEmail(email);
     if (existingUser) {
       return res.status(400).json({ message: 'An account with this email already exists.' });
     }
@@ -96,9 +98,10 @@ export const register = async (req: Request, res: Response) => {
 export const login = async (req: Request, res: Response) => {
   try {
     const validatedData = loginSchema.parse(req.body);
-    const { email, password } = validatedData;
+    const { password } = validatedData;
+    const email = normalizeEmail(validatedData.email);
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await findUserByEmail(email);
     if (!user) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }

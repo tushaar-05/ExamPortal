@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { findUserByEmail, normalizeEmail } from '../utils/email';
 
 const createStudentSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -45,9 +46,10 @@ export const getStudents = async (req: AuthenticatedRequest, res: Response) => {
 export const createStudent = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const validatedData = createStudentSchema.parse(req.body);
-    const { name, email, password, score } = validatedData;
+    const { name, password, score } = validatedData;
+    const email = normalizeEmail(validatedData.email);
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await findUserByEmail(email);
     if (existingUser) {
       return res.status(400).json({ message: 'An account with this email already exists.' });
     }
@@ -91,7 +93,8 @@ export const updateStudent = async (req: AuthenticatedRequest, res: Response) =>
   try {
     const { id } = req.params;
     const validatedData = updateStudentSchema.parse(req.body);
-    const { name, email, password, score } = validatedData;
+    const { name, password, score } = validatedData;
+    const email = normalizeEmail(validatedData.email);
 
     // Verify student exists
     const existingStudent = await prisma.user.findFirst({
@@ -102,9 +105,9 @@ export const updateStudent = async (req: AuthenticatedRequest, res: Response) =>
     }
 
     // Check if email is in use by another user
-    if (email !== existingStudent.email) {
-      const emailInUse = await prisma.user.findUnique({ where: { email } });
-      if (emailInUse) {
+    if (email !== normalizeEmail(existingStudent.email)) {
+      const emailInUse = await findUserByEmail(email);
+      if (emailInUse && emailInUse.id !== id) {
         return res.status(400).json({ message: 'An account with this email already exists.' });
       }
     }
