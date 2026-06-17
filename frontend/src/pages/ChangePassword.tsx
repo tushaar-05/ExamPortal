@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import StudentSidebar from '../components/StudentSidebar';
 import { 
   Shield, 
-  GraduationCap, 
   LayoutDashboard, 
-  BookOpen, 
   Users, 
   FileText, 
-  Award, 
   LogOut, 
   Lock, 
   Eye, 
@@ -98,14 +96,12 @@ const ChangePassword: React.FC<ChangePasswordProps> = ({ role }) => {
 
   const isAdmin = role === 'ADMIN';
   const accentColor = isAdmin ? 'var(--primary)' : 'var(--secondary)';
-  const sidebarBadgeClass = isAdmin ? 'neo-badge-admin' : 'neo-badge-student';
-  const sidebarTitle = isAdmin ? 'Admin Panel' : 'Student Hub';
   const homeRoute = isAdmin ? '/admin' : '/student';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-color)' }}>
-      {/* Sidebar matching the dashboard */}
-      <aside style={{
+      {isAdmin ? (
+        <aside style={{
         width: '260px',
         backgroundColor: '#ffffff',
         borderRight: 'var(--border-width) solid var(--border-color)',
@@ -130,15 +126,13 @@ const ChangePassword: React.FC<ChangePasswordProps> = ({ role }) => {
               padding: '6px',
               display: 'inline-flex'
             }}>
-              {isAdmin ? <Shield size={24} /> : <GraduationCap size={24} />}
+              <Shield size={24} />
             </div>
             <div>
               <span style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '1rem', display: 'block' }}>
-                {isAdmin ? 'Exam Portal' : 'Student Portal'}
+                Exam Portal
               </span>
-              <span className={`neo-badge ${sidebarBadgeClass}`} style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
-                {sidebarTitle}
-              </span>
+              <span className="neo-badge neo-badge-admin" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>Admin Panel</span>
             </div>
           </div>
 
@@ -151,52 +145,37 @@ const ChangePassword: React.FC<ChangePasswordProps> = ({ role }) => {
               width: '100%',
               transform: 'none'
             }}>
-              {isAdmin ? <LayoutDashboard size={18} /> : <BookOpen size={18} />}
+              <LayoutDashboard size={18} />
               Dashboard
             </Link>
             
-            {isAdmin ? (
-              <>
-                <Link to="/admin/exams" className="neo-btn neo-btn-secondary" style={{
-                  justifyContent: 'flex-start',
-                  boxShadow: 'none',
-                  border: '2px solid var(--border-color)',
-                  backgroundColor: 'transparent',
-                  width: '100%',
-                  textDecoration: 'none',
-                  transform: 'none'
-                }}>
-                  <FileText size={18} />
-                  Exams List
-                </Link>
-                <Link to="/admin/students" className="neo-btn neo-btn-secondary" style={{
-                  justifyContent: 'flex-start',
-                  boxShadow: 'none',
-                  border: '2px solid var(--border-color)',
-                  backgroundColor: 'transparent',
-                  width: '100%',
-                  textDecoration: 'none',
-                  transform: 'none'
-                }}>
-                  <Users size={18} />
-                  Students
-                </Link>
-              </>
-            ) : (
-              <button onClick={() => alert('Future Feature: Review History & Analytics')} className="neo-btn neo-btn-secondary" style={{
+            <Link to="/admin/exams" className="neo-btn neo-btn-secondary" style={{
+              justifyContent: 'flex-start',
+              boxShadow: 'none',
+              border: '2px solid var(--border-color)',
+              backgroundColor: 'transparent',
+              width: '100%',
+              textDecoration: 'none',
+              transform: 'none'
+            }}>
+              <FileText size={18} />
+              Exams List
+            </Link>
+            <Link to="/admin/students" className="neo-btn neo-btn-secondary" style={{
                 justifyContent: 'flex-start',
                 boxShadow: 'none',
                 border: '2px solid var(--border-color)',
                 backgroundColor: 'transparent',
-                width: '100%'
+                width: '100%',
+                textDecoration: 'none',
+                transform: 'none'
               }}>
-                <Award size={18} />
-                My Scores
-              </button>
-            )}
+              <Users size={18} />
+              Students
+            </Link>
 
             {/* Active Link */}
-            <Link to={isAdmin ? '/admin/change-password' : '/student/change-password'} className="neo-btn" style={{
+            <Link to="/admin/change-password" className="neo-btn" style={{
               justifyContent: 'flex-start',
               boxShadow: 'var(--box-shadow-sm)',
               transform: 'none',
@@ -214,6 +193,9 @@ const ChangePassword: React.FC<ChangePasswordProps> = ({ role }) => {
           Sign Out
         </button>
       </aside>
+      ) : (
+        <StudentSidebar activeItem="change-password" />
+      )}
 
       {/* Main Content Area */}
       <main style={{ flex: 1, padding: '40px' }}>
