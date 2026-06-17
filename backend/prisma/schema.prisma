@@ -1,0 +1,111 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  email       String   @unique
+  name        String
+  password    String
+  role        String   // 'ADMIN' | 'STUDENT' — validated in application code
+  score       String?  @default("N/A")
+  profilePic  String?  // URL to uploaded profile picture; null = use default
+  submissions ExamSubmission[]
+  attempts    ExamAttempt[]
+  feedbacks   Feedback[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+type Option {
+  id        String
+  text      String
+  imageUrl  String?
+}
+
+type Question {
+  id              String
+  text            String
+  imageUrl        String?
+  difficulty      String   // 'EASY' | 'MEDIUM' | 'HARD'
+  points          Int
+  options         Option[]
+  correctOptionId String
+}
+
+model Exam {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  title           String
+  description     String?
+  durationMinutes Int
+  totalPoints     Int        @default(100)
+  startTime       DateTime?
+  endTime         DateTime?
+  subject         String?
+  questions       Question[]
+  submissions     ExamSubmission[]
+  attempts        ExamAttempt[]
+  feedbacks       Feedback[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+type Answer {
+  questionId String
+  optionId   String?
+}
+
+model ExamSubmission {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  examId      String   @db.ObjectId
+  score       Int
+  totalPoints Int
+  answers     Answer[]
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+}
+
+model ExamAttempt {
+  id               String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String      @db.ObjectId
+  examId           String      @db.ObjectId
+  remainingChances Int         @default(3)
+  status           String      @default("STARTED") // 'STARTED' | 'SUBMITTED' | 'TERMINATED'
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam             Exam        @relation(fields: [examId], references: [id], onDelete: Cascade)
+  violations       Violation[]
+}
+
+model Violation {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  attemptId String   @db.ObjectId
+  userId    String   @db.ObjectId
+  type      String   // FULLSCREEN_EXIT, TAB_SWITCH, COPY_ATTEMPT, PASTE_ATTEMPT, CUT_ATTEMPT, WINDOW_BLUR
+  timestamp DateTime @default(now())
+  metadata  String?
+
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+}
+
+model Feedback {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  examId    String   @db.ObjectId
+  userId    String   @db.ObjectId
+  rating    Int      // 1–5
+  message   String?
+  createdAt DateTime @default(now())
+
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

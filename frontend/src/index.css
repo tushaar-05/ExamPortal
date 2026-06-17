@@ -1,0 +1,211 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;900&display=swap');
+
+:root {
+  --bg-color: #f6f5f0;
+  --card-bg: #ffffff;
+  --text-color: #1a1a1a;
+  --text-muted: #555555;
+  --primary: #ffd600;       /* Bold Neobrutalist Yellow */
+  --primary-hover: #ffea53;
+  --secondary: #a6e3e9;     /* Pastel Blue */
+  --accent: #d3c5f5;        /* Pastel Purple */
+  --accent-green: #b9e3de;  /* Pastel Green */
+  --danger: #ff6b6b;        /* Neobrutalist Red */
+  
+  --border-color: #1a1a1a;
+  --border-width: 3px;
+  --border-radius: 4px;
+  
+  --box-shadow: 4px 4px 0px 0px var(--border-color);
+  --box-shadow-lg: 8px 8px 0px 0px var(--border-color);
+  --box-shadow-sm: 2px 2px 0px 0px var(--border-color);
+  
+  --transition: all 0.15s ease-in-out;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  line-height: 1.5;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+  border-left: var(--border-width) solid var(--border-color);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border: var(--border-width) solid var(--border-color);
+}
+
+/* Custom Neobrutalism Utility Styles */
+.neo-card {
+  background-color: var(--card-bg);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  padding: 24px;
+  transition: var(--transition);
+}
+
+.neo-card-hover:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--box-shadow-lg);
+}
+
+.neo-btn {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 10px 20px;
+  background-color: var(--primary);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow-sm);
+  color: var(--text-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.neo-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--box-shadow);
+  background-color: var(--primary-hover);
+}
+
+.neo-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px 0px var(--border-color);
+}
+
+.neo-btn-secondary {
+  background-color: var(--secondary);
+}
+.neo-btn-secondary:hover {
+  background-color: #c0f4f9;
+}
+
+.neo-btn-accent {
+  background-color: var(--accent);
+}
+.neo-btn-accent:hover {
+  background-color: #e4dbfb;
+}
+
+.neo-btn-danger {
+  background-color: var(--danger);
+  color: #fff;
+}
+.neo-btn-danger:hover {
+  background-color: #ff8585;
+}
+
+.neo-input {
+  width: 100%;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1rem;
+  padding: 12px;
+  background-color: var(--card-bg);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-color);
+  outline: none;
+  transition: var(--transition);
+}
+
+.neo-input:focus {
+  background-color: #fffdec;
+  box-shadow: var(--box-shadow-sm);
+}
+
+.neo-select {
+  width: 100%;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1rem;
+  padding: 12px;
+  background-color: var(--card-bg);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-color);
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='black' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: var(--transition);
+}
+
+.neo-select:focus {
+  box-shadow: var(--box-shadow-sm);
+}
+
+.neo-badge {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border: 2px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--accent);
+  color: var(--text-color);
+  text-transform: uppercase;
+}
+
+.neo-badge-admin {
+  background-color: var(--primary);
+}
+
+.neo-badge-student {
+  background-color: var(--accent-green);
+}
+
+/* Page containers & Grid layouts */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.header-title {
+  font-weight: 900;
+  font-size: 2.5rem;
+  text-transform: uppercase;
+  letter-spacing: -1px;
+  margin-bottom: 20px;
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  margin-bottom: 30px;
+}
+
+/* ── Profile Avatar hover overlay ── */
+div:has(> .avatar-overlay):hover .avatar-overlay {
+  opacity: 1 !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
