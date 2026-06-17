@@ -50,6 +50,14 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+app.get('/', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'OK',
+    service: 'ExamPortal API',
+    health: '/health',
+  });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
