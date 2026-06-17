@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { LogIn, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { apiUrl } from '../utils/api';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -26,7 +27,7 @@ const Login: React.FC = () => {
 
     if (result.success) {
       // Fetch session to get role for routing
-      const response = await fetch('http://localhost:5002/api/auth/me', { credentials: 'include' });
+      const response = await fetch(apiUrl('/auth/me'), { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         const role = data.user.role;

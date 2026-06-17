@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { apiUrl } from '../../utils/api';
 import {
   ArrowLeft,
   CheckCircle,
@@ -83,7 +84,7 @@ const ExamReview: React.FC = () => {
     if (!id) return;
     (async () => {
       try {
-        const res = await fetch(`http://localhost:5002/api/student/exams/${id}/review`, {
+        const res = await fetch(apiUrl(`/student/exams/${id}/review`), {
           credentials: 'include',
         });
         if (res.ok) {

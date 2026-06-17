@@ -35,12 +35,13 @@ export const sendTokenCookies = (res: Response, userId: string, role: string) =>
   const refreshToken = generateRefreshToken(userId, role);
 
   const isProduction = process.env.NODE_ENV === 'production';
+  const sameSite = isProduction ? 'none' : 'lax';
 
   // Access token cookie (expires in 15 mins)
   res.cookie('accessToken', accessToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'lax',
+    sameSite,
     maxAge: 15 * 60 * 1000, // 15 mins in ms
   });
 
@@ -48,7 +49,7 @@ export const sendTokenCookies = (res: Response, userId: string, role: string) =>
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'lax',
+    sameSite,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
   });
 
@@ -57,16 +58,17 @@ export const sendTokenCookies = (res: Response, userId: string, role: string) =>
 
 export const clearTokenCookies = (res: Response) => {
   const isProduction = process.env.NODE_ENV === 'production';
+  const sameSite = isProduction ? 'none' : 'lax';
   
   res.clearCookie('accessToken', {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'lax',
+    sameSite,
   });
   
   res.clearCookie('refreshToken', {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'lax',
+    sameSite,
   });
 };

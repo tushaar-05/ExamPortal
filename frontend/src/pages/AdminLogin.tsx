@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ShieldCheck, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { apiUrl } from '../utils/api';
 
 const AdminLogin: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -22,13 +23,13 @@ const AdminLogin: React.FC = () => {
     setLoading(false);
 
     if (result.success) {
-      const response = await fetch('http://localhost:5002/api/auth/me', { credentials: 'include' });
+      const response = await fetch(apiUrl('/auth/me'), { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         if (data.user.role !== 'ADMIN') {
           setError('This portal is restricted to administrators only.');
           // Log them back out
-          await fetch('http://localhost:5002/api/auth/logout', { method: 'POST', credentials: 'include' });
+          await fetch(apiUrl('/auth/logout'), { method: 'POST', credentials: 'include' });
           return;
         }
         navigate('/admin', { replace: true });

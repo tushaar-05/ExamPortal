@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { BookOpen, Award, LogOut, RefreshCw, Clock, HelpCircle, Lock, Calendar, Trophy } from 'lucide-react';
 import ProfileAvatar from '../../components/ProfileAvatar';
+import { apiUrl } from '../../utils/api';
 
 interface Exam {
   id: string;
@@ -25,7 +26,7 @@ const StudentDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:5002/api/student/exams', {
+      const response = await fetch(apiUrl('/student/exams'), {
         credentials: 'include',
       });
       if (response.ok) {

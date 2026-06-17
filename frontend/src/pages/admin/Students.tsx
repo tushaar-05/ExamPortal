@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { apiUrl } from '../../utils/api';
 import { 
   Shield, 
   GraduationCap, 
@@ -69,7 +70,7 @@ const Students: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:5002/api/admin/students', {
+      const response = await fetch(apiUrl('/admin/students'), {
         credentials: 'include',
       });
       if (response.ok) {
@@ -126,7 +127,7 @@ const Students: React.FC = () => {
     setStudentResults([]);
     setExpandedAttemptId(null);
     try {
-      const response = await fetch(`http://localhost:5002/api/admin/students/${student.id}/results`, {
+      const response = await fetch(apiUrl(`/admin/students/${student.id}/results`), {
         credentials: 'include',
       });
       if (response.ok) {
@@ -169,8 +170,8 @@ const Students: React.FC = () => {
 
     try {
       const url = modalType === 'create' 
-        ? 'http://localhost:5002/api/admin/students' 
-        : `http://localhost:5002/api/admin/students/${selectedStudent?.id}`;
+        ? apiUrl('/admin/students') 
+        : apiUrl(`/admin/students/${selectedStudent?.id}`);
       
       const method = modalType === 'create' ? 'POST' : 'PUT';
       
@@ -218,7 +219,7 @@ const Students: React.FC = () => {
     setSuccess(null);
 
     try {
-      const response = await fetch(`http://localhost:5002/api/admin/students/${studentToDelete.id}`, {
+      const response = await fetch(apiUrl(`/admin/students/${studentToDelete.id}`), {
         method: 'DELETE',
         credentials: 'include',
       });

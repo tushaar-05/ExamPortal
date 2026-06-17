@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { apiUrl } from '../../utils/api';
 import { 
   Shield, 
   LayoutDashboard, 
@@ -108,7 +109,7 @@ const Exams: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:5002/api/admin/exams', {
+      const response = await fetch(apiUrl('/admin/exams'), {
         credentials: 'include',
       });
       if (response.ok) {
@@ -128,7 +129,7 @@ const Exams: React.FC = () => {
 
   const fetchExamDetails = async (examId: string) => {
     try {
-      const response = await fetch(`http://localhost:5002/api/admin/exams/${examId}`, {
+      const response = await fetch(apiUrl(`/admin/exams/${examId}`), {
         credentials: 'include',
       });
       if (response.ok) {
@@ -197,8 +198,8 @@ const Exams: React.FC = () => {
 
     try {
       const url = examModalType === 'create' 
-        ? 'http://localhost:5002/api/admin/exams' 
-        : `http://localhost:5002/api/admin/exams/${activeExam?.id || exams.find(ex => ex.title === formExamTitle)?.id}`;
+        ? apiUrl('/admin/exams') 
+        : apiUrl(`/admin/exams/${activeExam?.id || exams.find(ex => ex.title === formExamTitle)?.id}`);
       
       const method = examModalType === 'create' ? 'POST' : 'PUT';
 
@@ -257,7 +258,7 @@ const Exams: React.FC = () => {
     setSuccess(null);
 
     try {
-      const response = await fetch(`http://localhost:5002/api/admin/exams/${examToDelete.id}`, {
+      const response = await fetch(apiUrl(`/admin/exams/${examToDelete.id}`), {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -396,7 +397,7 @@ const Exams: React.FC = () => {
 
     // Call API to save questions
     try {
-      const response = await fetch(`http://localhost:5002/api/admin/exams/${activeExam.id}`, {
+      const response = await fetch(apiUrl(`/admin/exams/${activeExam.id}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -440,7 +441,7 @@ const Exams: React.FC = () => {
     const updatedQuestions = activeExam.questions.filter(q => q.id !== questionToDelete.id);
 
     try {
-      const response = await fetch(`http://localhost:5002/api/admin/exams/${activeExam.id}`, {
+      const response = await fetch(apiUrl(`/admin/exams/${activeExam.id}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -484,7 +485,7 @@ const Exams: React.FC = () => {
     formData.append('image', file);
 
     try {
-      const response = await fetch('http://localhost:5002/api/upload', {
+      const response = await fetch(apiUrl('/upload'), {
         method: 'POST',
         body: formData,
         credentials: 'include',

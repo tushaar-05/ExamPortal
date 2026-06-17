@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Camera, Loader } from 'lucide-react';
+import { apiUrl } from '../utils/api';
 
 const DEFAULT_PIC = '/profilePic.png';
 
@@ -23,7 +24,7 @@ const ProfileAvatar: React.FC = () => {
     formData.append('profilePic', file);
 
     try {
-      const res = await fetch('http://localhost:5002/api/student/profile/pic', {
+      const res = await fetch(apiUrl('/student/profile/pic'), {
         method: 'POST',
         credentials: 'include',
         body: formData,

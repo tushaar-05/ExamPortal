@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Clock, AlertCircle, CheckCircle, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
+import { apiUrl } from '../../utils/api';
 
 interface Option {
   id: string;
@@ -95,7 +96,7 @@ const ExamSession: React.FC = () => {
     if (!id) return;
     (async () => {
       try {
-        const res = await fetch(`http://localhost:5002/api/student/exams/${id}`, { credentials: 'include' });
+        const res = await fetch(apiUrl(`/student/exams/${id}`), { credentials: 'include' });
         const data = await res.json();
         if (res.ok) {
           setExam(data.exam);
@@ -123,7 +124,7 @@ const ExamSession: React.FC = () => {
     if (submitting || result || !exam) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`http://localhost:5002/api/student/exams/${exam.id}/submit`, {
+      const res = await fetch(apiUrl(`/student/exams/${exam.id}/submit`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -149,7 +150,7 @@ const ExamSession: React.FC = () => {
   const reportViolation = async (type: string) => {
     if (!attemptId || result || remainingChances <= 0) return;
     try {
-      const response = await fetch('http://localhost:5002/api/violations', {
+      const response = await fetch(apiUrl('/violations'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -358,7 +359,7 @@ const ExamSession: React.FC = () => {
     if (submitting || result || !exam) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`http://localhost:5002/api/student/exams/${exam.id}/submit`, {
+      const res = await fetch(apiUrl(`/student/exams/${exam.id}/submit`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -506,7 +507,7 @@ const ExamSession: React.FC = () => {
     if (!exam || rating === 0) return;
     setFeedbackSubmitting(true);
     try {
-      const res = await fetch(`http://localhost:5002/api/student/feedback`, {
+      const res = await fetch(apiUrl(`/student/feedback`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

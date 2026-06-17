@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { LayoutDashboard, Users, FileText, LogOut, RefreshCw, BarChart2, Shield, Lock, Search, HelpCircle } from 'lucide-react';
+import { apiUrl } from '../../utils/api';
 
 interface StudentSubjectMark {
   id: string;
@@ -27,7 +28,7 @@ const StudentSubjectScores: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:5002/api/admin/students/subject-scores', {
+      const response = await fetch(apiUrl('/admin/students/subject-scores'), {
         credentials: 'include',
       });
       if (response.ok) {
