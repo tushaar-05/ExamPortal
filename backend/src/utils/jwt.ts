@@ -9,28 +9,25 @@ const getRequiredEnv = (key: string): string => {
   return value;
 };
 
-const JWT_SECRET = getRequiredEnv('JWT_SECRET');
-const JWT_REFRESH_SECRET = getRequiredEnv('JWT_REFRESH_SECRET');
-
 export interface TokenPayload {
   userId: string;
   role: string;
 }
 
 export const generateAccessToken = (userId: string, role: string): string => {
-  return jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: '15m' });
+  return jwt.sign({ userId, role }, getRequiredEnv('JWT_SECRET'), { expiresIn: '15m' });
 };
 
 export const generateRefreshToken = (userId: string, role: string): string => {
-  return jwt.sign({ userId, role }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ userId, role }, getRequiredEnv('JWT_REFRESH_SECRET'), { expiresIn: '7d' });
 };
 
 export const verifyAccessToken = (token: string): TokenPayload => {
-  return jwt.verify(token, JWT_SECRET) as TokenPayload;
+  return jwt.verify(token, getRequiredEnv('JWT_SECRET')) as TokenPayload;
 };
 
 export const verifyRefreshToken = (token: string): TokenPayload => {
-  return jwt.verify(token, JWT_REFRESH_SECRET) as TokenPayload;
+  return jwt.verify(token, getRequiredEnv('JWT_REFRESH_SECRET')) as TokenPayload;
 };
 
 export const sendTokenCookies = (res: Response, userId: string, role: string) => {
