@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { upload } from '../utils/upload';
+import { getUploadedImageUrl, upload } from '../utils/upload';
 import { authenticateUser, authorizeRoles } from '../middleware/auth';
 
 const router = Router();
@@ -10,8 +10,7 @@ router.post('/', authenticateUser, authorizeRoles('ADMIN'), upload.single('image
     return res.status(400).json({ message: 'No image file provided' });
   }
 
-  // The URL accessible by the frontend
-  const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  const imageUrl = getUploadedImageUrl(req, req.file);
 
   return res.status(200).json({
     message: 'Image uploaded successfully',

@@ -2,7 +2,6 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
-import path from 'path';
 
 // Load environment variables before route modules handle any requests.
 dotenv.config();
@@ -15,6 +14,7 @@ import studentRoutes from './routes/studentRoutes';
 import violationRoutes from './routes/violationRoutes';
 import feedbackRoutes from './routes/feedbackRoutes';
 import { initAdminUser } from './controllers/authController';
+import { uploadsDir } from './utils/upload';
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -54,7 +54,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(uploadsDir));
 
 app.get('/', (req: Request, res: Response) => {
   res.status(200).json({

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { getUploadedImageUrl } from '../utils/upload';
 
 // ─── 1. Get List of Exams for Student Dashboard ────────────────────────────────
 export const getStudentExams = async (req: AuthenticatedRequest, res: Response) => {
@@ -489,7 +490,7 @@ export const uploadProfilePic = async (req: AuthenticatedRequest, res: Response)
       return res.status(400).json({ message: 'No image file provided.' });
     }
 
-    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    const imageUrl = getUploadedImageUrl(req, req.file);
 
     await prisma.user.update({
       where: { id: userId },
@@ -582,5 +583,4 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
-
 
