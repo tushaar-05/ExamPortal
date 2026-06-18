@@ -104,12 +104,12 @@ export const login = async (req: Request, res: Response) => {
 
     const user = await findUserByEmail(email);
     if (!user) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
+      return res.status(404).json({ message: 'No account exists with this email address.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
+      return res.status(400).json({ message: 'Incorrect password. Please try again.' });
     }
 
     const tokens = sendTokenCookies(res, user.id, user.role);
