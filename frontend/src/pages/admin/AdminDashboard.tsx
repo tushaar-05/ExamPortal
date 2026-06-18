@@ -5,7 +5,6 @@ import {
   Activity,
   AlertTriangle,
   BarChart2,
-  CheckCircle2,
   Clock,
   FileText,
   LayoutDashboard,
@@ -38,18 +37,9 @@ interface RecentExam {
   attemptsCount: number;
 }
 
-interface LatestViolation {
-  id: string;
-  type: string;
-  timestamp: string;
-  studentName: string;
-  studentEmail: string | null;
-}
-
 interface DashboardData {
   stats: AdminStats;
   recentExams: RecentExam[];
-  latestViolations: LatestViolation[];
 }
 
 const sidebarLinkStyle: React.CSSProperties = {
@@ -295,7 +285,7 @@ const AdminDashboard: React.FC = () => {
 
             <section style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1.25fr) minmax(320px, 0.75fr)',
+              gridTemplateColumns: 'minmax(0, 1.35fr) minmax(320px, 0.65fr)',
               gap: '22px',
               alignItems: 'start',
             }}>
@@ -366,35 +356,6 @@ const AdminDashboard: React.FC = () => {
                       <div className="neo-badge neo-badge-admin" style={{ padding: '8px 10px', justifyContent: 'center' }}>{stats?.totalSubmissions ?? 0} submitted</div>
                     </div>
                   </div>
-                </div>
-
-                <div style={{ ...cardStyle, padding: '22px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                    <AlertTriangle size={22} />
-                    <h2 style={{ textTransform: 'uppercase', fontWeight: 900, fontSize: '1.1rem' }}>Latest Alerts</h2>
-                  </div>
-                  {dashboard?.latestViolations.length ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {dashboard.latestViolations.map(alert => (
-                        <div key={alert.id} style={{ border: '2px solid var(--border-color)', borderRadius: 6, padding: '11px 12px', backgroundColor: '#fff7f7' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                            <strong style={{ textTransform: 'uppercase', fontSize: '0.82rem' }}>{alert.type.replace(/_/g, ' ')}</strong>
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 700 }}>
-                              {new Date(alert.timestamp).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <p style={{ margin: '5px 0 0', color: 'var(--text-muted)', fontWeight: 700 }}>
-                            {alert.studentName}{alert.studentEmail ? ` · ${alert.studentEmail}` : ''}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontWeight: 800 }}>
-                      <CheckCircle2 size={20} />
-                      No integrity alerts recorded yet.
-                    </div>
-                  )}
                 </div>
               </div>
             </section>

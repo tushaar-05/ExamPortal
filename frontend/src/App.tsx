@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -44,6 +44,30 @@ const NavigationRoot: React.FC = () => {
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
+  const location = useLocation();
+
+  useEffect(() => {
+    const path = location.pathname;
+    const routeTitles: Array<[RegExp, string]> = [
+      [/^\/login$/, 'Student Login'],
+      [/^\/register$/, 'Student Registration'],
+      [/^\/admin-login$/, 'Admin Login'],
+      [/^\/unauthorized$/, 'Unauthorized'],
+      [/^\/admin$/, 'Admin Dashboard'],
+      [/^\/admin\/exams$/, 'Exam Management'],
+      [/^\/admin\/students$/, 'Student Management'],
+      [/^\/admin\/subject-scores$/, 'Subject Marks'],
+      [/^\/admin\/change-password$/, 'Admin Security Settings'],
+      [/^\/student$/, 'Student Dashboard'],
+      [/^\/student\/scores$/, 'My Scores'],
+      [/^\/student\/leaderboard$/, 'Leaderboard'],
+      [/^\/student\/change-password$/, 'Student Security Settings'],
+      [/^\/student\/exam\/[^/]+\/review$/, 'Exam Review'],
+      [/^\/student\/exam\/[^/]+$/, 'Exam Session'],
+    ];
+    const matchedTitle = routeTitles.find(([pattern]) => pattern.test(path))?.[1] || 'Exam Portal';
+    document.title = `${matchedTitle} | Exam Portal`;
+  }, [location.pathname]);
 
   // Helper: redirect already-logged-in users away from auth pages
   const authGuard = (element: React.ReactElement) => {
