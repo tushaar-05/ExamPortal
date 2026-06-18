@@ -19,6 +19,113 @@ const updateStudentSchema = z.object({
   score: z.string().optional().or(z.literal('')),
 });
 
+// ─── Admin Dashboard Summary ──────────────────────────────────────────────────
+export const getDashboardSummary = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const [
+      totalExams,
+      activeStudents,
+      pendingReviews,
+      recentViolations,
+      totalSubmissions,
+      totalAttempts,
+      activeModules,
+      recentExams,
+      latestViolations,
+    ] = await Promise.all([
+      prisma.exam.count(),
+      prisma.user.count({ where: { role: 'STUDENT' } }),
+      prisma.examAttempt.count({ where: { status: 'STARTED' } }),
+      prisma.violation.count({ where: { timestamp: { gte: last24Hours } } }),
+      prisma.examSubmission.count(),
+      prisma.examAttempt.count(),
+      prisma.exam.count({
+        where: {
+          AND: [
+            { OR: [{ startTime: null }, { startTime: { lte: now } }] },
+            { OR: [{ endTime: null }, { endTime: { gte: now } }] },
+          ],
+        },
+      }),
+      prisma.exam.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          subject: true,
+          totalPoints: true,
+          durationMinutes: true,
+          createdAt: true,
+          _count: {
+            select: {
+              submissions: true,
+              attempts: true,
+            },
+          },
+        },
+      }),
+      prisma.violation.findMany({
+        take: 6,
+        orderBy: { timestamp: 'desc' },
+        select: {
+          id: true,
+          type: true,
+          timestamp: true,
+          userId: true,
+        },
+      }),
+    ]);
+
+    const violationUserIds = [...new Set(latestViolations.map(v => v.userId))];
+    const violationUsers = violationUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: violationUserIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+    const userById = new Map(violationUsers.map(user => [user.id, user]));
+
+    return res.status(200).json({
+      stats: {
+        totalExams,
+        activeModules,
+        activeStudents,
+        pendingReviews,
+        recentViolations,
+        totalSubmissions,
+        totalAttempts,
+      },
+      recentExams: recentExams.map(exam => ({
+        id: exam.id,
+        title: exam.title,
+        subject: exam.subject || 'Unassigned',
+        totalPoints: exam.totalPoints,
+        durationMinutes: exam.durationMinutes,
+        createdAt: exam.createdAt,
+        submissionsCount: exam._count.submissions,
+        attemptsCount: exam._count.attempts,
+      })),
+      latestViolations: latestViolations.map(violation => {
+        const student = userById.get(violation.userId);
+        return {
+          id: violation.id,
+          type: violation.type,
+          timestamp: violation.timestamp,
+          studentName: student?.name || 'Unknown student',
+          studentEmail: student?.email || null,
+        };
+      }),
+    });
+  } catch (err) {
+    console.error('Error fetching admin dashboard summary:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 // ─── Get All Students ──────────────────────────────────────────────────────────
 export const getStudents = async (req: AuthenticatedRequest, res: Response) => {
   try {

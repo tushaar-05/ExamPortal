@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getStudents, createStudent, updateStudent, deleteStudent, getStudentExamResults, getAllStudentsSubjectScores } from '../controllers/adminController';
+import { getDashboardSummary, getStudents, createStudent, updateStudent, deleteStudent, getStudentExamResults, getAllStudentsSubjectScores } from '../controllers/adminController';
 import { authenticateUser, authorizeRoles } from '../middleware/auth';
 
 const router = Router();
@@ -8,6 +8,7 @@ const router = Router();
 router.use(authenticateUser);
 router.use(authorizeRoles('ADMIN'));
 
+router.get('/dashboard', getDashboardSummary);
 router.get('/students', getStudents);
 router.get('/students/subject-scores', getAllStudentsSubjectScores);
 router.get('/students/:id/results', getStudentExamResults);

@@ -14,7 +14,6 @@ import uploadRoutes from './routes/uploadRoutes';
 import studentRoutes from './routes/studentRoutes';
 import violationRoutes from './routes/violationRoutes';
 import feedbackRoutes from './routes/feedbackRoutes';
-import { authenticateUser, authorizeRoles } from './middleware/auth';
 import { initAdminUser } from './controllers/authController';
 
 const app = express();
@@ -73,19 +72,6 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/violations', violationRoutes);
 app.use('/api/student', feedbackRoutes);
-
-// Protected Demo Routes (To test role-based authorizations on the backend)
-app.get('/api/dashboard/admin', authenticateUser, authorizeRoles('ADMIN'), (req: Request, res: Response) => {
-  res.status(200).json({
-    message: 'Welcome to the Admin API. You have ADMIN privileges.',
-    stats: {
-      totalExams: 12,
-      activeStudents: 45,
-      pendingReviews: 8,
-      recentViolations: 2,
-    }
-  });
-});
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
