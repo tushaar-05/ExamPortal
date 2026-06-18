@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { apiUrl } from '../../utils/api';
+import { apiFetch } from '../../utils/api';
 import { 
   Shield, 
   GraduationCap, 
@@ -70,7 +70,7 @@ const Students: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(apiUrl('/admin/students'), {
+      const response = await apiFetch('/admin/students', {
         credentials: 'include',
       });
       if (response.ok) {
@@ -127,7 +127,7 @@ const Students: React.FC = () => {
     setStudentResults([]);
     setExpandedAttemptId(null);
     try {
-      const response = await fetch(apiUrl(`/admin/students/${student.id}/results`), {
+      const response = await apiFetch(`/admin/students/${student.id}/results`, {
         credentials: 'include',
       });
       if (response.ok) {
@@ -169,13 +169,13 @@ const Students: React.FC = () => {
     }
 
     try {
-      const url = modalType === 'create' 
-        ? apiUrl('/admin/students') 
-        : apiUrl(`/admin/students/${selectedStudent?.id}`);
+      const url = modalType === 'create'
+        ? '/admin/students'
+        : `/admin/students/${selectedStudent?.id}`;
       
       const method = modalType === 'create' ? 'POST' : 'PUT';
       
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -219,7 +219,7 @@ const Students: React.FC = () => {
     setSuccess(null);
 
     try {
-      const response = await fetch(apiUrl(`/admin/students/${studentToDelete.id}`), {
+      const response = await apiFetch(`/admin/students/${studentToDelete.id}`, {
         method: 'DELETE',
         credentials: 'include',
       });

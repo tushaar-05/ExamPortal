@@ -7,8 +7,12 @@ export interface AuthenticatedRequest extends Request {
 
 export const authenticateUser = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const { accessToken, refreshToken } = req.cookies;
+  const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.slice('Bearer '.length)
+    : undefined;
+  const token = accessToken || bearerToken;
 
-  if (!accessToken) {
+  if (!token) {
     if (!refreshToken) {
       return res.status(401).json({ message: 'Authentication required.' });
     }
@@ -25,7 +29,7 @@ export const authenticateUser = (req: AuthenticatedRequest, res: Response, next:
   }
 
   try {
-    const decoded = verifyAccessToken(accessToken);
+    const decoded = verifyAccessToken(token);
     req.user = decoded;
     return next();
   } catch (err: any) {

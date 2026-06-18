@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { API_BASE_URL } from '../utils/api';
+import { apiFetch, setAuthToken } from '../utils/api';
 
 export interface User {
   id: string;
@@ -28,7 +28,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkSession = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      const response = await apiFetch('/auth/me', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -57,7 +57,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await apiFetch('/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,6 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await response.json();
 
       if (response.ok) {
+        setAuthToken(data.accessToken || null);
         setUser(data.user);
         return { success: true };
       } else {
@@ -82,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (name: string, email: string, password: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      const response = await apiFetch('/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -94,6 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await response.json();
 
       if (response.ok) {
+        setAuthToken(data.accessToken || null);
         setUser(data.user);
         return { success: true };
       } else {
@@ -107,13 +109,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      await fetch(`${API_BASE_URL}/auth/logout`, {
+      await apiFetch('/auth/logout', {
         method: 'POST',
         credentials: 'include',
       });
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      setAuthToken(null);
       setUser(null);
     }
   };

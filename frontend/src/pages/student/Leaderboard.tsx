@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ProfileAvatar from '../../components/ProfileAvatar';
-import { apiUrl } from '../../utils/api';
+import { apiFetch } from '../../utils/api';
 import {
   BookOpen, Award, LogOut, RefreshCw, Lock,
   Trophy, TrendingUp, CheckSquare, BarChart2, Crown,
@@ -300,7 +300,7 @@ const Leaderboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(apiUrl('/student/leaderboard'), { credentials: 'include' });
+      const res = await apiFetch('/student/leaderboard', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setEntries(data.leaderboard);

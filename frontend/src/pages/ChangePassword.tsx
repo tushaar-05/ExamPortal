@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import StudentSidebar from '../components/StudentSidebar';
-import { apiUrl } from '../utils/api';
+import { apiFetch } from '../utils/api';
 import { 
   Shield, 
   LayoutDashboard, 
@@ -63,7 +63,7 @@ const ChangePassword: React.FC<ChangePasswordProps> = ({ role }) => {
     setLoading(true);
 
     try {
-      const response = await fetch(apiUrl('/auth/change-password'), {
+      const response = await apiFetch('/auth/change-password', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -80,11 +80,12 @@ export const register = async (req: Request, res: Response) => {
     });
 
     // Auto-login on registration
-    sendTokenCookies(res, user.id, user.role);
+    const tokens = sendTokenCookies(res, user.id, user.role);
 
     return res.status(201).json({
       message: 'Registration successful',
       user: { id: user.id, email: user.email, name: user.name, role: user.role, profilePic: user.profilePic ?? null },
+      accessToken: tokens.accessToken,
     });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
@@ -111,11 +112,12 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    sendTokenCookies(res, user.id, user.role);
+    const tokens = sendTokenCookies(res, user.id, user.role);
 
     return res.status(200).json({
       message: 'Login successful',
       user: { id: user.id, email: user.email, name: user.name, role: user.role, profilePic: user.profilePic ?? null },
+      accessToken: tokens.accessToken,
     });
   } catch (err: any) {
     if (err instanceof z.ZodError) {

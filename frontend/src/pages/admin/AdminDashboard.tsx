@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { LayoutDashboard, Users, FileText, LogOut, RefreshCw, BarChart2, Shield, Lock } from 'lucide-react';
-import { apiUrl } from '../../utils/api';
+import { apiFetch } from '../../utils/api';
 
 interface AdminStats {
   totalExams: number;
@@ -21,7 +21,7 @@ const AdminDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(apiUrl('/dashboard/admin'), {
+      const response = await apiFetch('/dashboard/admin', {
         credentials: 'include',
       });
       if (response.ok) {
