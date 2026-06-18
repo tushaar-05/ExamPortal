@@ -66,6 +66,83 @@ const ExamSession: React.FC = () => {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
+  // Camera & proctoring states
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isCameraLoading, setIsCameraLoading] = useState<boolean>(false);
+  const proctorVideoRef = useRef<HTMLVideoElement | null>(null);
+  const setupVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const startCamera = async () => {
+    setIsCameraLoading(true);
+    setCameraError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setCameraStream(stream);
+    } catch (err: any) {
+      console.error('Camera access error:', err);
+      setCameraError('Camera access is required. Please ensure your camera is connected and you grant permissions.');
+    } finally {
+      setIsCameraLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (exam && !result && !cameraStream) {
+      startCamera();
+    }
+  }, [exam, result]);
+
+  useEffect(() => {
+    if (setupVideoRef.current && cameraStream) {
+      setupVideoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, isFullscreenActive, isPaused]);
+
+  useEffect(() => {
+    if (proctorVideoRef.current && cameraStream) {
+      proctorVideoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, isFullscreenActive, isPaused]);
+
+  // Camera interruption monitoring
+  useEffect(() => {
+    if (!cameraStream || result || remainingChances <= 0) return;
+
+    const handleTrackEnded = () => {
+      setIsPaused(true);
+      reportViolation('CAMERA_DISCONNECTED');
+    };
+
+    const videoTrack = cameraStream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.addEventListener('ended', handleTrackEnded);
+    }
+
+    return () => {
+      if (videoTrack) {
+        videoTrack.removeEventListener('ended', handleTrackEnded);
+      }
+    };
+  }, [cameraStream, result, remainingChances, attemptId]);
+
+  // Clean up camera stream tracks on unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  // Clean up camera stream tracks when results are shown (exam finished)
+  useEffect(() => {
+    if (result && cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+  }, [result, cameraStream]);
+
   // Trigger temporary warning toast
   const triggerToast = (msg: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -471,16 +548,86 @@ const ExamSession: React.FC = () => {
     );
   }
 
-  // ── Fullscreen Enforcement Screen ──────────────────────────────────────────
+  // ── Entry Requirements Screen ──────────────────────────────────────────
   if (exam && !isFullscreenActive) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-color)', padding: 24, fontFamily: 'Outfit, sans-serif' }}>
-        <div className="neo-card" style={{ maxWidth: 500, width: '100%', textAlign: 'center', padding: '40px' }}>
-          <AlertCircle size={48} style={{ color: 'var(--primary)', margin: '0 auto 20px' }} />
-          <h2 style={{ fontWeight: 900, marginBottom: 12, textTransform: 'uppercase' }}>Fullscreen Required</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: 28, lineHeight: 1.6 }}>
-            Fullscreen mode is required to take this exam. The exam will start immediately once accepted.
+        <div className="neo-card" style={{ maxWidth: 520, width: '100%', textAlign: 'center', padding: '40px' }}>
+          <h2 style={{ fontWeight: 900, marginBottom: 8, textTransform: 'uppercase' }}>Exam Setup Checklist</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 24, fontSize: '0.9rem' }}>
+            Please complete the system check requirements below to start the exam.
           </p>
+
+          {/* Checklist Area */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, textAlign: 'left', marginBottom: 28 }}>
+            
+            {/* Step 1: Camera Access */}
+            <div style={{
+              border: '2px solid var(--border-color)',
+              borderRadius: 'var(--border-radius)',
+              padding: 16,
+              backgroundColor: '#fff',
+              boxShadow: 'var(--box-shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontWeight: 900, fontSize: '0.95rem' }}>1. Live Proctoring Camera</span>
+                {cameraStream ? (
+                  <span className="neo-badge neo-badge-student" style={{ backgroundColor: 'var(--accent-green)', padding: '2px 8px', fontSize: '0.7rem' }}>Connected</span>
+                ) : (
+                  <span className="neo-badge" style={{ backgroundColor: 'var(--danger)', color: '#fff', padding: '2px 8px', fontSize: '0.7rem' }}>Required</span>
+                )}
+              </div>
+
+              {isCameraLoading ? (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
+                  Initializing camera...
+                </div>
+              ) : cameraStream ? (
+                <div style={{ position: 'relative', width: '100%', height: 160, borderRadius: 6, overflow: 'hidden', backgroundColor: '#000', border: '2px solid var(--border-color)' }}>
+                  <video
+                    ref={setupVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+                    Camera access is required for proctoring to prevent cheating. Please grant browser camera permissions.
+                  </p>
+                  {cameraError && (
+                    <div style={{ color: 'var(--danger)', fontSize: '0.8rem', fontWeight: 700, marginBottom: 12 }}>
+                      {cameraError}
+                    </div>
+                  )}
+                  <button type="button" onClick={startCamera} className="neo-btn neo-btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem', width: '100%', justifyContent: 'center' }}>
+                    Request Camera Access
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Step 2: Fullscreen */}
+            <div style={{
+              border: '2px solid var(--border-color)',
+              borderRadius: 'var(--border-radius)',
+              padding: 16,
+              backgroundColor: '#fff',
+              boxShadow: 'var(--box-shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 900, fontSize: '0.95rem' }}>2. Fullscreen Mode</span>
+                <span className="neo-badge neo-badge-admin" style={{ padding: '2px 8px', fontSize: '0.7rem' }}>Enforced</span>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '8px 0 0 0', lineHeight: 1.4 }}>
+                The exam must be taken in fullscreen. Exiting fullscreen or shifting tabs will log an integrity violation.
+              </p>
+            </div>
+
+          </div>
+
           {fullscreenError && (
             <div style={{
               background: '#ffe0e0',
@@ -490,13 +637,21 @@ const ExamSession: React.FC = () => {
               color: 'var(--danger)',
               fontWeight: 800,
               marginBottom: 20,
+              fontSize: '0.85rem'
             }}>
               {fullscreenError}
             </div>
           )}
-          <button onClick={enterFullscreen} className="neo-btn" style={{ margin: '0 auto', fontSize: '1.05rem', padding: '12px 28px' }}>
-            Enter Fullscreen & Start
-          </button>
+
+          {cameraStream ? (
+            <button onClick={enterFullscreen} className="neo-btn" style={{ margin: '0 auto', fontSize: '1.05rem', padding: '12px 28px', width: '100%', justifyContent: 'center' }}>
+              Accept Requirements & Start Exam
+            </button>
+          ) : (
+            <button disabled className="neo-btn" style={{ margin: '0 auto', fontSize: '1.05rem', padding: '12px 28px', width: '100%', justifyContent: 'center', opacity: 0.5, cursor: 'not-allowed' }}>
+              Please Enable Camera to Continue
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1078,6 +1233,57 @@ const ExamSession: React.FC = () => {
                 {submitting ? 'Submitting…' : 'Confirm Submit'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Floating Proctoring Video Feed */}
+      {cameraStream && isFullscreenActive && !result && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          left: 24,
+          width: '160px',
+          height: '120px',
+          borderRadius: 'var(--border-radius)',
+          border: '3px solid var(--border-color)',
+          boxShadow: 'var(--box-shadow-lg)',
+          overflow: 'hidden',
+          backgroundColor: '#000',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <video
+            ref={proctorVideoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+          <div style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            color: '#fff',
+            fontSize: '0.62rem',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em'
+          }}>
+            <span className="neo-blink" style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              backgroundColor: '#ff3b30',
+              display: 'inline-block'
+            }} />
+            Live Proctoring
           </div>
         </div>
       )}

@@ -209,3 +209,12 @@ div:has(> .avatar-overlay):hover .avatar-overlay {
   to   { transform: rotate(360deg); }
 }
 
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.neo-blink {
+  animation: blink 1.5s infinite;
+}
+
