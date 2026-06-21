@@ -17,8 +17,20 @@ const questionSchema = z.object({
   imageUrl: z.string().nullable().optional(),
   difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
   points: z.number().min(0, 'Question points must be non-negative'),
-  options: z.array(optionSchema).min(2, 'At least 2 options are required'),
-  correctOptionId: z.string().min(1, 'Correct option ID is required'),
+  type: z.enum(['MCQ', 'SUBJECTIVE']).nullable().optional(),
+  options: z.array(optionSchema).optional().nullable(),
+  correctOptionId: z.string().nullable().optional(),
+  correctSubjectiveAnswer: z.string().nullable().optional(),
+  correctAnswerKeywords: z.string().nullable().optional(),
+}).refine((data) => {
+  const qType = data.type || 'MCQ';
+  if (qType === 'MCQ') {
+    return (data.options && data.options.length >= 2) && (data.correctOptionId && data.correctOptionId.trim() !== '');
+  }
+  return true;
+}, {
+  message: 'MCQ questions require at least 2 options and a correct option choice.',
+  path: ['options']
 });
 
 const createExamSchema = z.object({
@@ -29,6 +41,7 @@ const createExamSchema = z.object({
   startTime: z.string().datetime({ offset: true }).nullable().optional(),
   endTime: z.string().datetime({ offset: true }).nullable().optional(),
   subject: z.string().nullable().optional(),
+  type: z.enum(['MCQ', 'SUBJECTIVE']).nullable().optional(),
 });
 
 const updateExamSchema = z.object({
@@ -39,6 +52,7 @@ const updateExamSchema = z.object({
   startTime: z.string().datetime({ offset: true }).nullable().optional(),
   endTime: z.string().datetime({ offset: true }).nullable().optional(),
   subject: z.string().nullable().optional(),
+  type: z.enum(['MCQ', 'SUBJECTIVE']).nullable().optional(),
   questions: z.array(questionSchema).optional(),
 });
 
@@ -61,6 +75,7 @@ export const getExams = async (req: AuthenticatedRequest, res: Response) => {
       startTime: exam.startTime,
       endTime: exam.endTime,
       subject: exam.subject,
+      type: exam.type || 'MCQ',
       questionsCount: exam.questions.length,
       createdAt: exam.createdAt,
     }));
@@ -96,7 +111,7 @@ export const getExamById = async (req: AuthenticatedRequest, res: Response) => {
 export const createExam = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const validatedData = createExamSchema.parse(req.body);
-    const { title, description, durationMinutes, totalPoints, startTime, endTime, subject } = validatedData;
+    const { title, description, durationMinutes, totalPoints, startTime, endTime, subject, type } = validatedData;
 
     const exam = await prisma.exam.create({
       data: {
@@ -104,6 +119,7 @@ export const createExam = async (req: AuthenticatedRequest, res: Response) => {
         description: description || '',
         durationMinutes,
         totalPoints,
+        type: type || 'MCQ',
         startTime: startTime ? new Date(startTime) : null,
         endTime: endTime ? new Date(endTime) : null,
         subject: subject || null,
@@ -129,7 +145,7 @@ export const updateExam = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const validatedData = updateExamSchema.parse(req.body);
-    const { title, description, durationMinutes, totalPoints, startTime, endTime, subject, questions } = validatedData;
+    const { title, description, durationMinutes, totalPoints, startTime, endTime, subject, questions, type } = validatedData;
 
     // Check if exam exists
     const existingExam = await prisma.exam.findUnique({ where: { id } });
@@ -143,6 +159,7 @@ export const updateExam = async (req: AuthenticatedRequest, res: Response) => {
       description: description || '',
       durationMinutes,
       totalPoints,
+      type: type !== undefined ? (type || 'MCQ') : undefined,
       startTime: startTime !== undefined ? (startTime ? new Date(startTime) : null) : undefined,
       endTime: endTime !== undefined ? (endTime ? new Date(endTime) : null) : undefined,
       subject: subject !== undefined ? (subject || null) : undefined,

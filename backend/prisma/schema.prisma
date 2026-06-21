@@ -29,13 +29,16 @@ type Option {
 }
 
 type Question {
-  id              String
-  text            String
-  imageUrl        String?
-  difficulty      String   // 'EASY' | 'MEDIUM' | 'HARD'
-  points          Int
-  options         Option[]
-  correctOptionId String
+  id                      String
+  text                    String
+  imageUrl                String?
+  difficulty              String   // 'EASY' | 'MEDIUM' | 'HARD'
+  points                  Int
+  options                 Option[]
+  correctOptionId         String?
+  type                    String?  // 'MCQ' | 'SUBJECTIVE'
+  correctSubjectiveAnswer String?  // model answer
+  correctAnswerKeywords   String?  // comma-separated keywords
 }
 
 model Exam {
@@ -44,6 +47,7 @@ model Exam {
   description     String?
   durationMinutes Int
   totalPoints     Int        @default(100)
+  type            String?    // 'MCQ' | 'SUBJECTIVE'
   startTime       DateTime?
   endTime         DateTime?
   subject         String?
@@ -56,8 +60,11 @@ model Exam {
 }
 
 type Answer {
-  questionId String
-  optionId   String?
+  questionId       String
+  optionId         String?
+  subjectiveAnswer String?
+  pointsEarned     Int?
+  feedback         String?
 }
 
 model ExamSubmission {
@@ -67,6 +74,7 @@ model ExamSubmission {
   score       Int
   totalPoints Int
   answers     Answer[]
+  graded      Boolean?
   createdAt   DateTime @default(now())
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)

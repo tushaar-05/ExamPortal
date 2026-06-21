@@ -55,7 +55,11 @@ export const getStudentExams = async (req: AuthenticatedRequest, res: Response) 
         endTime: exam.endTime,
         subject: exam.subject,
         status,
-        score: submission ? `${submission.score} / ${submission.totalPoints}` : undefined
+        score: submission ? (
+          exam.type === 'SUBJECTIVE' && submission.graded === false
+            ? "Pending Grading"
+            : `${submission.score} / ${submission.totalPoints}`
+        ) : undefined
       };
     });
 
@@ -155,7 +159,8 @@ export const getExamForSession = async (req: AuthenticatedRequest, res: Response
 const submitExamSchema = z.object({
   answers: z.array(z.object({
     questionId: z.string(),
-    optionId: z.string().nullable()
+    optionId: z.string().nullable().optional(),
+    subjectiveAnswer: z.string().nullable().optional()
   })),
   isTerminated: z.boolean().optional()
 });
@@ -207,14 +212,47 @@ export const submitExam = async (req: AuthenticatedRequest, res: Response) => {
     // Calculate score
     let score = 0;
     
-    validatedData.answers.forEach(answer => {
-      const question = exam.questions.find(q => q.id === answer.questionId);
-      if (question) {
-        if (answer.optionId === question.correctOptionId) {
-          score += question.points;
+    if (exam.type !== 'SUBJECTIVE') {
+      validatedData.answers.forEach(answer => {
+        const question = exam.questions.find(q => q.id === answer.questionId);
+        if (question) {
+          if (question.type === 'SUBJECTIVE') {
+            const studentAnsText = (answer.subjectiveAnswer || '').trim().toLowerCase();
+            const modelAns = (question.correctSubjectiveAnswer || '').trim().toLowerCase();
+            const keywordsStr = question.correctAnswerKeywords || '';
+            
+            if (studentAnsText.length > 0) {
+              if (keywordsStr.trim() !== '') {
+                const keywords = keywordsStr.split(',').map(k => k.trim().toLowerCase()).filter(k => k !== '');
+                if (keywords.length > 0) {
+                  let matched = 0;
+                  keywords.forEach(kw => {
+                    if (studentAnsText.includes(kw)) {
+                      matched++;
+                    }
+                  });
+                  const matchRatio = matched / keywords.length;
+                  score += Math.round(question.points * matchRatio);
+                } else {
+                  score += question.points;
+                }
+              } else {
+                if (studentAnsText === modelAns) {
+                  score += question.points;
+                } else if (studentAnsText.length >= 10) {
+                  score += Math.round(question.points * 0.5); // 50% credit fallback
+                }
+              }
+            }
+          } else {
+            // MCQ
+            if (answer.optionId === question.correctOptionId) {
+              score += question.points;
+            }
+          }
         }
-      }
-    });
+      });
+    }
 
     // Create submission
     const submission = await prisma.examSubmission.create({
@@ -223,7 +261,13 @@ export const submitExam = async (req: AuthenticatedRequest, res: Response) => {
         examId: id,
         score,
         totalPoints: exam.totalPoints,
-        answers: validatedData.answers
+        answers: validatedData.answers.map(ans => ({
+          questionId: ans.questionId,
+          optionId: ans.optionId || null,
+          subjectiveAnswer: ans.subjectiveAnswer || null,
+          pointsEarned: null,
+        })),
+        graded: exam.type === 'SUBJECTIVE' ? false : true,
       }
     });
 
@@ -341,6 +385,7 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           title: exam.title,
           totalPoints: exam.totalPoints,
           score: sub ? sub.score : null,
+          graded: sub ? (sub.graded !== false) : true,
           status,
           dateTaken: sub ? sub.createdAt : null,
         };
@@ -398,6 +443,7 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           title: exam.title,
           totalPoints: exam.totalPoints,
           score: sub ? sub.score : null,
+          graded: sub ? (sub.graded !== false) : true,
           status,
           dateTaken: sub ? sub.createdAt : null,
         };
@@ -453,15 +499,61 @@ export const getSubmissionReview = async (req: AuthenticatedRequest, res: Respon
     // Match each question with the student's selection
     const questionReviews = exam.questions.map(q => {
       const studentAns = submission.answers.find(a => a.questionId === q.id);
+      
+      let pointsEarned = 0;
+      if (studentAns) {
+        if (exam.type === 'SUBJECTIVE') {
+          pointsEarned = studentAns.pointsEarned ?? 0;
+        } else if (q.type === 'SUBJECTIVE') {
+          const studentAnsText = (studentAns.subjectiveAnswer || '').trim().toLowerCase();
+          const modelAns = (q.correctSubjectiveAnswer || '').trim().toLowerCase();
+          const keywordsStr = q.correctAnswerKeywords || '';
+          
+          if (studentAnsText.length > 0) {
+            if (keywordsStr.trim() !== '') {
+              const keywords = keywordsStr.split(',').map(k => k.trim().toLowerCase()).filter(k => k !== '');
+              if (keywords.length > 0) {
+                let matched = 0;
+                keywords.forEach(kw => {
+                  if (studentAnsText.includes(kw)) matched++;
+                });
+                const matchRatio = matched / keywords.length;
+                pointsEarned = Math.round(q.points * matchRatio);
+              } else {
+                pointsEarned = q.points;
+              }
+            } else {
+              if (studentAnsText === modelAns) {
+                pointsEarned = q.points;
+              } else if (studentAnsText.length >= 10) {
+                pointsEarned = Math.round(q.points * 0.5);
+              }
+            }
+          }
+        } else {
+          // MCQ
+          if (studentAns.optionId === q.correctOptionId) {
+            pointsEarned = q.points;
+          }
+        }
+      }
+
       return {
         id: q.id,
         text: q.text,
         imageUrl: q.imageUrl,
         difficulty: q.difficulty,
         points: q.points,
+        pointsEarned,
+        type: q.type || 'MCQ',
         options: q.options,
         correctOptionId: q.correctOptionId,
+        correctSubjectiveAnswer: q.correctSubjectiveAnswer,
+        correctAnswerKeywords: q.correctAnswerKeywords,
         selectedOptionId: studentAns ? studentAns.optionId : null,
+        selectedSubjectiveAnswer: studentAns ? studentAns.subjectiveAnswer : null,
+        subjectiveAnswer: studentAns ? studentAns.subjectiveAnswer : null,
+        feedback: studentAns ? studentAns.feedback : null,
       };
     });
 
@@ -471,6 +563,8 @@ export const getSubmissionReview = async (req: AuthenticatedRequest, res: Respon
       score: submission.score,
       durationMinutes: exam.durationMinutes,
       dateSubmitted: submission.createdAt,
+      graded: submission.graded,
+      type: exam.type || 'MCQ',
       questions: questionReviews
     });
 

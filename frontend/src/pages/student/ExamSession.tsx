@@ -15,6 +15,7 @@ interface Question {
   imageUrl?: string | null;
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
   points: number;
+  type?: 'MCQ' | 'SUBJECTIVE';
   options: Option[];
 }
 
@@ -38,6 +39,7 @@ const ExamSession: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [answers, setAnswers] = useState<Record<string, string | null>>({});
+  const [subjectiveAnswers, setSubjectiveAnswers] = useState<Record<string, string>>({});
   const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set());
   const [viewedQuestions, setViewedQuestions] = useState<Set<string>>(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -201,13 +203,17 @@ const ExamSession: React.FC = () => {
     if (submitting || result || !exam) return;
     setSubmitting(true);
     try {
+      const submissionAnswers = Object.keys(answers).map(qId => {
+        const q = exam.questions.find(q => q.id === qId);
+        if (q?.type === 'SUBJECTIVE') {
+          return { questionId: qId, subjectiveAnswer: subjectiveAnswers[qId] || '' };
+        }
+        return { questionId: qId, optionId: answers[qId] };
+      });
       const res = await apiFetch(`/student/exams/${exam.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          answers: Object.keys(answers).map(qId => ({ questionId: qId, optionId: answers[qId] })),
-          isTerminated: true
-        }),
+        body: JSON.stringify({ answers: submissionAnswers, isTerminated: true }),
         credentials: 'include',
       });
       const data = await res.json();
@@ -436,12 +442,17 @@ const ExamSession: React.FC = () => {
     if (submitting || result || !exam) return;
     setSubmitting(true);
     try {
+      const submissionAnswers = Object.keys(answers).map(qId => {
+        const q = exam.questions.find(q => q.id === qId);
+        if (q?.type === 'SUBJECTIVE') {
+          return { questionId: qId, subjectiveAnswer: subjectiveAnswers[qId] || '' };
+        }
+        return { questionId: qId, optionId: answers[qId] };
+      });
       const res = await apiFetch(`/student/exams/${exam.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          answers: Object.keys(answers).map(qId => ({ questionId: qId, optionId: answers[qId] })),
-        }),
+        body: JSON.stringify({ answers: submissionAnswers }),
         credentials: 'include',
       });
       const data = await res.json();
@@ -455,7 +466,7 @@ const ExamSession: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [answers, exam, result, submitting]);
+  }, [answers, subjectiveAnswers, exam, result, submitting]);
 
   // ── Countdown ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -849,9 +860,15 @@ const ExamSession: React.FC = () => {
   const q = exam.questions[currentIndex];
   const isMarkedQ  = markedForReview.has(q.id);
   const selected   = answers[q.id];
+  const subjAnswer = subjectiveAnswers[q.id] || '';
+  const isSubjective = q.type === 'SUBJECTIVE';
   const isFirst    = currentIndex === 0;
   const isLast     = currentIndex === exam.questions.length - 1;
-  const attempted  = Object.values(answers).filter(v => v !== null).length;
+  // Count attempted: MCQ needs optionId, Subjective needs non-empty text
+  const attempted  = exam.questions.filter((_q) => {
+    if (_q.type === 'SUBJECTIVE') return (subjectiveAnswers[_q.id] || '').trim().length > 0;
+    return answers[_q.id] !== null;
+  }).length;
 
   return (
     <div style={{
@@ -966,62 +983,111 @@ const ExamSession: React.FC = () => {
               {q.text}
             </p>
 
-            {/* ── Options ── */}
-            <div style={{
-              border: 'var(--border-width) solid var(--border-color)',
-              borderRadius: 'var(--border-radius)',
-              overflow: 'hidden',
-              boxShadow: 'var(--box-shadow)',
-              background: '#fff',
-            }}>
-              {q.options.map((opt, idx) => {
-                const isSel = selected === opt.id;
-                return (
-                  <div
-                    key={opt.id}
-                    onClick={() => selectOption(q.id, opt.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 16,
-                      padding: '18px 20px',
-                      background: isSel ? 'var(--primary)' : '#fff',
-                      borderBottom: idx < q.options.length - 1
-                        ? 'var(--border-width) solid var(--border-color)' : 'none',
-                      cursor: 'pointer',
-                      transition: 'background 0.12s ease',
-                      userSelect: 'none',
-                    }}
-                  >
-                    {/* Letter badge */}
-                    <span style={{
-                      minWidth: 36, height: 36, flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontWeight: 900, fontSize: '0.9rem',
-                      background: isSel ? 'var(--text-color)' : 'var(--bg-color)',
-                      color: isSel ? 'var(--primary)' : 'var(--text-color)',
-                      border: 'var(--border-width) solid var(--border-color)',
-                      borderRadius: 'var(--border-radius)',
-                      transition: 'all 0.12s',
-                    }}>
-                      {LABELS[idx]}
-                    </span>
-
-                    {/* Text + optional image */}
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontWeight: isSel ? 800 : 500, fontSize: '1rem', color: 'var(--text-color)' }}>
-                        {opt.text}
+            {/* ── Options or Subjective Textarea ── */}
+            {isSubjective ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 16px',
+                  background: '#fef9e7',
+                  border: '2px solid var(--border-color)',
+                  borderRadius: 'var(--border-radius)',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  color: '#666',
+                }}>
+                  ✍️ Write your answer in the text area below. Your response will be auto-graded by keyword matching.
+                </div>
+                <textarea
+                  value={subjAnswer}
+                  onChange={e => {
+                    if (result) return;
+                    setSubjectiveAnswers(prev => ({ ...prev, [q.id]: e.target.value }));
+                    // mark as answered if has content
+                    setAnswers(prev => ({ ...prev, [q.id]: e.target.value.trim() ? 'subjective_answered' : null }));
+                  }}
+                  disabled={!!result}
+                  placeholder="Type your answer here..."
+                  style={{
+                    width: '100%',
+                    minHeight: 200,
+                    padding: '18px 20px',
+                    fontSize: '1rem',
+                    fontFamily: 'Outfit, sans-serif',
+                    fontWeight: 500,
+                    lineHeight: 1.7,
+                    border: '2.5px solid var(--border-color)',
+                    borderRadius: 'var(--border-radius)',
+                    background: '#fff',
+                    resize: 'vertical',
+                    boxShadow: 'inset 2px 2px 0 rgba(0,0,0,0.04)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, textAlign: 'right' }}>
+                  {subjAnswer.length} characters typed
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                border: 'var(--border-width) solid var(--border-color)',
+                borderRadius: 'var(--border-radius)',
+                overflow: 'hidden',
+                boxShadow: 'var(--box-shadow)',
+                background: '#fff',
+              }}>
+                {q.options.map((opt, idx) => {
+                  const isSel = selected === opt.id;
+                  return (
+                    <div
+                      key={opt.id}
+                      onClick={() => selectOption(q.id, opt.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 16,
+                        padding: '18px 20px',
+                        background: isSel ? 'var(--primary)' : '#fff',
+                        borderBottom: idx < q.options.length - 1
+                          ? 'var(--border-width) solid var(--border-color)' : 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.12s ease',
+                        userSelect: 'none',
+                      }}
+                    >
+                      {/* Letter badge */}
+                      <span style={{
+                        minWidth: 36, height: 36, flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 900, fontSize: '0.9rem',
+                        background: isSel ? 'var(--text-color)' : 'var(--bg-color)',
+                        color: isSel ? 'var(--primary)' : 'var(--text-color)',
+                        border: 'var(--border-width) solid var(--border-color)',
+                        borderRadius: 'var(--border-radius)',
+                        transition: 'all 0.12s',
+                      }}>
+                        {LABELS[idx]}
                       </span>
-                      {opt.imageUrl && (
-                        <div style={{ marginTop: 8 }}>
-                          <img src={opt.imageUrl} alt="Option" style={{ maxHeight: 140, maxWidth: '100%', border: '2px solid var(--border-color)', borderRadius: 4 }} />
-                        </div>
-                      )}
+
+                      {/* Text + optional image */}
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: isSel ? 800 : 500, fontSize: '1rem', color: 'var(--text-color)' }}>
+                          {opt.text}
+                        </span>
+                        {opt.imageUrl && (
+                          <div style={{ marginTop: 8 }}>
+                            <img src={opt.imageUrl} alt="Option" style={{ maxHeight: 140, maxWidth: '100%', border: '2px solid var(--border-color)', borderRadius: 4 }} />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
           </main>
         </div>

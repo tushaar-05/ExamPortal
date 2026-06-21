@@ -457,3 +457,106 @@ export const getAllStudentsSubjectScores = async (req: AuthenticatedRequest, res
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+// ─── Get Submissions for Exam ────────────────────────────────────────────────
+export const getExamSubmissions = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const exam = await prisma.exam.findUnique({
+      where: { id },
+    });
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+
+    const submissions = await prisma.examSubmission.findMany({
+      where: { examId: id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.status(200).json({ submissions });
+  } catch (err) {
+    console.error('Error fetching exam submissions:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// ─── Grade Subjective Exam Submission ─────────────────────────────────────────
+export const gradeSubmission = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const { answers } = req.body;
+    
+    const submission = await prisma.examSubmission.findUnique({
+      where: { id: submissionId },
+      include: { exam: true },
+    });
+
+    if (!submission) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+
+    let newScore = 0;
+    const updatedAnswers = submission.answers.map(originalAns => {
+      const gradeInfo = answers?.find((a: any) => a.questionId === originalAns.questionId);
+      const question = submission.exam.questions.find(q => q.id === originalAns.questionId);
+      const maxPoints = question ? question.points : 0;
+      
+      const pointsEarned = gradeInfo ? Math.min(maxPoints, Math.max(0, Number(gradeInfo.pointsEarned || 0))) : (originalAns.pointsEarned ?? 0);
+      const feedback = gradeInfo ? (gradeInfo.feedback || null) : (originalAns.feedback || null);
+      newScore += pointsEarned;
+
+      return {
+        ...originalAns,
+        pointsEarned,
+        feedback,
+      };
+    });
+
+    const updatedSubmission = await prisma.examSubmission.update({
+      where: { id: submissionId },
+      data: {
+        answers: updatedAnswers,
+        score: newScore,
+        graded: true,
+      },
+    });
+
+    // Recalculate student overall score
+    const userId = submission.userId;
+    const allSubmissions = await prisma.examSubmission.findMany({
+      where: { userId }
+    });
+
+    let totalEarned = 0;
+    let totalPossible = 0;
+    allSubmissions.forEach(sub => {
+      totalEarned += sub.score;
+      totalPossible += sub.totalPoints;
+    });
+
+    const averagePercentage = totalPossible > 0 ? Math.round((totalEarned / totalPossible) * 100) : 0;
+    await prisma.user.update({
+      where: { id: userId },
+      data: { score: `${averagePercentage}%` }
+    });
+
+    return res.status(200).json({
+      message: 'Submission graded successfully',
+      submission: updatedSubmission,
+    });
+  } catch (err) {
+    console.error('Error grading submission:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};

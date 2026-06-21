@@ -33,7 +33,10 @@ interface Question {
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
   points: number;
   options: Option[];
-  correctOptionId: string;
+  correctOptionId?: string | null;
+  type?: 'MCQ' | 'SUBJECTIVE' | null;
+  correctSubjectiveAnswer?: string | null;
+  correctAnswerKeywords?: string | null;
 }
 
 interface Exam {
@@ -47,6 +50,7 @@ interface Exam {
   startTime?: string | null;
   endTime?: string | null;
   subject?: string | null;
+  type?: 'MCQ' | 'SUBJECTIVE' | null;
   createdAt: string;
 }
 
@@ -59,9 +63,22 @@ const Exams: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
-  // Mode selection: 'LIST' or 'QUESTIONS'
-  const [currentView, setCurrentView] = useState<'LIST' | 'QUESTIONS'>('LIST');
+  // Mode selection: 'LIST' or 'QUESTIONS' or 'SUBMISSIONS'
+  const [currentView, setCurrentView] = useState<'LIST' | 'QUESTIONS' | 'SUBMISSIONS'>('LIST');
   const [activeExam, setActiveExam] = useState<Exam | null>(null);
+
+  // Submissions state
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState<string | null>(null);
+
+  // Grading Modal states
+  const [gradingModalOpen, setGradingModalOpen] = useState(false);
+  const [activeSubmission, setActiveSubmission] = useState<any>(null);
+  const [gradingScores, setGradingScores] = useState<Record<string, number>>({});
+  const [gradingFeedbacks, setGradingFeedbacks] = useState<Record<string, string>>({});
+  const [gradeSubmitLoading, setGradeSubmitLoading] = useState(false);
+  const [gradeSubmitError, setGradeSubmitError] = useState<string | null>(null);
 
   // Exam outline Modal states
   const [examModalOpen, setExamModalOpen] = useState(false);
@@ -73,6 +90,7 @@ const Exams: React.FC = () => {
   const [formExamStartTime, setFormExamStartTime] = useState('');
   const [formExamEndTime, setFormExamEndTime] = useState('');
   const [formExamSubject, setFormExamSubject] = useState('');
+  const [formExamType, setFormExamType] = useState<'MCQ' | 'SUBJECTIVE'>('MCQ');
   const [examFormError, setExamFormError] = useState<string | null>(null);
   const [examFormLoading, setExamFormLoading] = useState(false);
 
@@ -87,6 +105,9 @@ const Exams: React.FC = () => {
   const [formQImage, setFormQImage] = useState('');
   const [formQDifficulty, setFormQDifficulty] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM');
   const [formQPoints, setFormQPoints] = useState(25);
+  const [formQType, setFormQType] = useState<'MCQ' | 'SUBJECTIVE'>('MCQ');
+  const [formQCorrectSubjectiveAnswer, setFormQCorrectSubjectiveAnswer] = useState('');
+  const [formQCorrectAnswerKeywords, setFormQCorrectAnswerKeywords] = useState('');
   
   // Option text and image states
   const [opt1Text, setOpt1Text] = useState('');
@@ -148,8 +169,93 @@ const Exams: React.FC = () => {
     fetchExams();
   }, []);
 
-  // ─── Exam Outline CRUD Operations ──────────────────────────────────────────
+  const handleViewSubmissions = async (exam: Exam) => {
+    const success = await fetchExamDetails(exam.id);
+    if (!success) {
+      setError('Failed to load exam details');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
+    setCurrentView('SUBMISSIONS');
+    setSubmissionsLoading(true);
+    setSubmissionsError(null);
+    setSubmissions([]);
+    try {
+      const response = await apiFetch(`/admin/exams/${exam.id}/submissions`, {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setSubmissions(data.submissions || []);
+      } else {
+        setSubmissionsError(data.message || 'Failed to fetch exam submissions.');
+      }
+    } catch (err) {
+      console.error('Fetch submissions error:', err);
+      setSubmissionsError('Network error: Could not reach the API.');
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  };
 
+  const handleOpenGradingModal = (submission: any) => {
+    setActiveSubmission(submission);
+    const scores: Record<string, number> = {};
+    const feedbacks: Record<string, string> = {};
+    submission.answers.forEach((ans: any) => {
+      scores[ans.questionId] = ans.pointsEarned ?? 0;
+      feedbacks[ans.questionId] = ans.feedback || '';
+    });
+    setGradingScores(scores);
+    setGradingFeedbacks(feedbacks);
+    setGradeSubmitError(null);
+    setGradingModalOpen(true);
+  };
+
+  const handleGradeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGradeSubmitLoading(true);
+    setGradeSubmitError(null);
+
+    const answersPayload = Object.keys(gradingScores).map(qId => ({
+      questionId: qId,
+      pointsEarned: gradingScores[qId],
+      feedback: gradingFeedbacks[qId] || null,
+    }));
+
+    try {
+      const response = await apiFetch(`/admin/submissions/${activeSubmission.id}/grade`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ answers: answersPayload }),
+        credentials: 'include',
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSuccess('Submission graded successfully!');
+        setGradingModalOpen(false);
+        if (activeExam) {
+          handleViewSubmissions(activeExam);
+        }
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setGradeSubmitError(data.message || 'Failed to submit grade.');
+      }
+    } catch (err) {
+      console.error('Submit grade error:', err);
+      setGradeSubmitError('Network error: Could not reach the API.');
+    } finally {
+      setGradeSubmitLoading(false);
+    }
+  };
+
+  // ─── Exam Outline CRUD Operations ──────────────────────────────────────────
+  
   const handleOpenCreateExam = () => {
     setActiveExam(null);
     setExamModalType('create');
@@ -160,6 +266,7 @@ const Exams: React.FC = () => {
     setFormExamStartTime('');
     setFormExamEndTime('');
     setFormExamSubject('');
+    setFormExamType('MCQ');
     setExamFormError(null);
     setExamModalOpen(true);
   };
@@ -171,6 +278,7 @@ const Exams: React.FC = () => {
     setFormExamDesc(exam.description || '');
     setFormExamDuration(exam.durationMinutes);
     setFormExamPoints(exam.totalPoints);
+    setFormExamType(exam.type || 'MCQ');
     // Convert ISO string to local datetime-local format (YYYY-MM-DDTHH:mm)
     const toLocal = (iso: string | null | undefined) => {
       if (!iso) return '';
@@ -211,6 +319,7 @@ const Exams: React.FC = () => {
         startTime: formExamStartTime ? new Date(formExamStartTime).toISOString() : null,
         endTime: formExamEndTime ? new Date(formExamEndTime).toISOString() : null,
         subject: formExamSubject || null,
+        type: formExamType,
       };
 
       const response = await apiFetch(url, {
@@ -304,6 +413,9 @@ const Exams: React.FC = () => {
     setFormQImage('');
     setFormQDifficulty('MEDIUM');
     setFormQPoints(25);
+    setFormQType(activeExam?.type === 'SUBJECTIVE' ? 'SUBJECTIVE' : 'MCQ');
+    setFormQCorrectSubjectiveAnswer('');
+    setFormQCorrectAnswerKeywords('');
     
     // Clear options
     setOpt1Text('');
@@ -327,23 +439,38 @@ const Exams: React.FC = () => {
     setFormQImage(question.imageUrl || '');
     setFormQDifficulty(question.difficulty);
     setFormQPoints(question.points);
+    setFormQType(activeExam?.type === 'SUBJECTIVE' ? 'SUBJECTIVE' : (question.type || 'MCQ'));
+    setFormQCorrectSubjectiveAnswer(question.correctSubjectiveAnswer || '');
+    setFormQCorrectAnswerKeywords(question.correctAnswerKeywords || '');
 
     // Setup options text/images
     if (question.options[0]) {
       setOpt1Text(question.options[0].text);
       setOpt1Image(question.options[0].imageUrl || '');
+    } else {
+      setOpt1Text('');
+      setOpt1Image('');
     }
     if (question.options[1]) {
       setOpt2Text(question.options[1].text);
       setOpt2Image(question.options[1].imageUrl || '');
+    } else {
+      setOpt2Text('');
+      setOpt2Image('');
     }
     if (question.options[2]) {
       setOpt3Text(question.options[2].text);
       setOpt3Image(question.options[2].imageUrl || '');
+    } else {
+      setOpt3Text('');
+      setOpt3Image('');
     }
     if (question.options[3]) {
       setOpt4Text(question.options[3].text);
       setOpt4Image(question.options[3].imageUrl || '');
+    } else {
+      setOpt4Text('');
+      setOpt4Image('');
     }
 
     const correctIdx = question.options.findIndex(opt => opt.id === question.correctOptionId);
@@ -362,22 +489,24 @@ const Exams: React.FC = () => {
       return;
     }
 
-    if (!opt1Text.trim() || !opt2Text.trim() || !opt3Text.trim() || !opt4Text.trim()) {
-      setQuestionError('All 4 option text values must be filled.');
-      return;
+    if (formQType === 'MCQ') {
+      if (!opt1Text.trim() || !opt2Text.trim() || !opt3Text.trim() || !opt4Text.trim()) {
+        setQuestionError('All 4 option text values must be filled for an MCQ question.');
+        return;
+      }
     }
 
     if (!activeExam) return;
 
     // Build options list
-    const options: Option[] = [
+    const options: Option[] = formQType === 'MCQ' ? [
       { id: 'opt1', text: opt1Text, imageUrl: opt1Image.trim() !== '' ? opt1Image : null },
       { id: 'opt2', text: opt2Text, imageUrl: opt2Image.trim() !== '' ? opt2Image : null },
       { id: 'opt3', text: opt3Text, imageUrl: opt3Image.trim() !== '' ? opt3Image : null },
       { id: 'opt4', text: opt4Text, imageUrl: opt4Image.trim() !== '' ? opt4Image : null },
-    ];
+    ] : [];
 
-    const correctOptionId = options[correctOptionIndex].id;
+    const correctOptionId = formQType === 'MCQ' ? options[correctOptionIndex].id : null;
 
     // Create question item
     const newQuestion: Question = {
@@ -386,8 +515,11 @@ const Exams: React.FC = () => {
       imageUrl: formQImage.trim() !== '' ? formQImage : null,
       difficulty: formQDifficulty,
       points: Number(formQPoints),
+      type: formQType,
       options,
       correctOptionId,
+      correctSubjectiveAnswer: formQType === 'SUBJECTIVE' ? formQCorrectSubjectiveAnswer : null,
+      correctAnswerKeywords: formQType === 'SUBJECTIVE' ? formQCorrectAnswerKeywords : null,
     };
 
     // Calculate updated questions list
@@ -771,7 +903,9 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                         </td>
                         <td style={{ padding: '16px 20px', fontWeight: 700 }}>{exam.durationMinutes} mins</td>
                         <td style={{ padding: '16px 20px' }}>
-                          <span className="neo-badge neo-badge-student">{exam.questionsCount || 0} MCQs</span>
+                          <span className={`neo-badge ${exam.type === 'SUBJECTIVE' ? 'neo-badge-admin' : 'neo-badge-student'}`}>
+                            {exam.questionsCount || 0} {exam.type === 'SUBJECTIVE' ? 'Subjective' : 'MCQ'} Questions
+                          </span>
                         </td>
                         <td style={{ padding: '16px 20px', fontWeight: 700 }}>{exam.totalPoints} pts</td>
                         <td style={{ padding: '16px 20px' }}>
@@ -796,6 +930,13 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                               style={{ padding: '6px 12px', fontSize: '0.8rem', boxShadow: '1px 1px 0px 0px var(--border-color)', transform: 'none' }}
                             >
                               Manage Questions
+                            </button>
+                            <button
+                              onClick={() => handleViewSubmissions(exam)}
+                              className="neo-btn neo-btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', boxShadow: '1px 1px 0px 0px var(--border-color)', transform: 'none' }}
+                            >
+                              Submissions
                             </button>
                             <button
                               onClick={() => handleOpenEditExam(exam)}
@@ -948,6 +1089,11 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                       <span className="neo-badge" style={{ backgroundColor: 'transparent', borderStyle: 'dashed' }}>
                         {question.points} Points
                       </span>
+                      <span className="neo-badge" style={{
+                        backgroundColor: question.type === 'SUBJECTIVE' ? 'var(--accent)' : 'var(--primary)',
+                      }}>
+                        {question.type === 'SUBJECTIVE' ? '✍ Subjective' : '🔘 MCQ'}
+                      </span>
                     </div>
 
                     {/* Question Content */}
@@ -977,63 +1123,214 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                       </div>
                     )}
 
-                    {/* MCQ Options Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
-                      {question.options.map((option, optIdx) => {
-                        const isCorrect = option.id === question.correctOptionId;
-                        return (
-                          <div 
-                            key={option.id} 
-                            style={{
-                              border: '2px solid var(--border-color)',
-                              borderRadius: '4px',
-                              padding: '16px',
-                              backgroundColor: isCorrect ? 'var(--accent-green)' : '#fcfcfc',
-                              boxShadow: isCorrect ? 'var(--box-shadow-sm)' : 'none',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '10px'
-                            }}
-                          >
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                              <span style={{
-                                fontWeight: 900,
-                                backgroundColor: isCorrect ? 'var(--text-color)' : '#e1e1e1',
-                                color: isCorrect ? '#ffffff' : 'var(--text-color)',
-                                border: '2px solid var(--border-color)',
-                                width: '24px',
-                                height: '24px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: '4px',
-                                fontSize: '0.8rem',
-                                flexShrink: 0
-                              }}>
-                                {String.fromCharCode(65 + optIdx)}
-                              </span>
-                              <span style={{ fontWeight: 700 }}>{option.text}</span>
-                            </div>
-                            
-                            {/* Option image if present */}
-                            {option.imageUrl && (
-                              <div style={{ marginTop: '6px' }}>
-                                <img 
-                                  src={option.imageUrl} 
-                                  alt={`Option ${String.fromCharCode(65 + optIdx)}`} 
-                                  style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', border: '1px solid #ddd', borderRadius: '4px' }}
-                                  onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/150x80?text=Invalid+Image+URL'; }}
-                                />
-                              </div>
-                            )}
+                    {question.type === 'SUBJECTIVE' ? (
+                      /* Subjective: Show model answer + keywords */
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div style={{
+                          border: '2px solid var(--border-color)',
+                          borderRadius: 6,
+                          backgroundColor: '#fef9e7',
+                          padding: '14px 18px',
+                        }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, letterSpacing: '0.06em' }}>Model Answer</div>
+                          <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem', whiteSpace: 'pre-wrap', color: question.correctSubjectiveAnswer ? 'inherit' : 'var(--text-muted)' }}>
+                            {question.correctSubjectiveAnswer || 'No model answer provided.'}
+                          </p>
+                        </div>
+                        {question.correctAnswerKeywords && (
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Keywords:</span>
+                            {question.correctAnswerKeywords.split(',').map(kw => kw.trim()).filter(k => k).map(kw => (
+                              <span key={kw} style={{
+                                backgroundColor: 'var(--secondary)',
+                                border: '1.5px solid var(--border-color)',
+                                borderRadius: 4,
+                                padding: '2px 8px',
+                                fontSize: '0.78rem',
+                                fontWeight: 800,
+                              }}>{kw}</span>
+                            ))}
                           </div>
-                        );
-                      })}
-                    </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* MCQ Options Grid */
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+                        {question.options.map((option, optIdx) => {
+                          const isCorrect = option.id === question.correctOptionId;
+                          return (
+                            <div 
+                              key={option.id} 
+                              style={{
+                                border: '2px solid var(--border-color)',
+                                borderRadius: '4px',
+                                padding: '16px',
+                                backgroundColor: isCorrect ? 'var(--accent-green)' : '#fcfcfc',
+                                boxShadow: isCorrect ? 'var(--box-shadow-sm)' : 'none',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '10px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                <span style={{
+                                  fontWeight: 900,
+                                  backgroundColor: isCorrect ? 'var(--text-color)' : '#e1e1e1',
+                                  color: isCorrect ? '#ffffff' : 'var(--text-color)',
+                                  border: '2px solid var(--border-color)',
+                                  width: '24px',
+                                  height: '24px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '4px',
+                                  fontSize: '0.8rem',
+                                  flexShrink: 0
+                                }}>
+                                  {String.fromCharCode(65 + optIdx)}
+                                </span>
+                                <span style={{ fontWeight: 700 }}>{option.text}</span>
+                              </div>
+                              {option.imageUrl && (
+                                <div style={{ marginTop: '6px' }}>
+                                  <img 
+                                    src={option.imageUrl} 
+                                    alt={`Option ${String.fromCharCode(65 + optIdx)}`} 
+                                    style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', border: '1px solid #ddd', borderRadius: '4px' }}
+                                    onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/150x80?text=Invalid+Image+URL'; }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
             </div>
+          </div>
+        )}
+        {/* VIEW 3: EXAM SUBMISSIONS LISTING & MANUAL GRADING */}
+        {currentView === 'SUBMISSIONS' && activeExam && (
+          <div>
+            <header style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '30px',
+              paddingBottom: '20px',
+              borderBottom: '3px solid var(--border-color)'
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button 
+                    onClick={() => { setCurrentView('LIST'); fetchExams(); }} 
+                    className="neo-btn neo-btn-secondary" 
+                    style={{ padding: '6px 10px', boxShadow: 'none', borderWidth: '2px' }}
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <h1 className="header-title" style={{ margin: 0, fontSize: '1.8rem' }}>Submissions Dashboard</h1>
+                </div>
+                <p style={{ color: 'var(--text-muted)', marginTop: '4px', marginLeft: '38px' }}>
+                  Review submissions for: <span style={{ fontWeight: 800, color: 'var(--text-color)' }}>{activeExam.title}</span> ({activeExam.type === 'SUBJECTIVE' ? 'Subjective' : 'MCQ'} Exam)
+                </p>
+              </div>
+              <button onClick={() => handleViewSubmissions(activeExam)} className="neo-btn" style={{ padding: '8px 12px' }}>
+                <RefreshCw size={16} />
+                Refresh
+              </button>
+            </header>
+
+            {submissionsError && (
+              <div className="neo-card" style={{
+                backgroundColor: 'var(--danger)',
+                color: '#fff',
+                marginBottom: '30px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <AlertCircle size={20} />
+                <span>{submissionsError}</span>
+              </div>
+            )}
+
+            {submissionsLoading ? (
+              <div style={{ textAlign: 'center', padding: '80px 0' }}>
+                <h3 style={{ textTransform: 'uppercase', fontWeight: 900 }}>Loading Submissions...</h3>
+              </div>
+            ) : submissions.length === 0 ? (
+              <div className="neo-card" style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#ffffff' }}>
+                <HelpCircle size={48} style={{ margin: '0 auto 16px auto', color: 'var(--text-muted)' }} />
+                <h3 style={{ textTransform: 'uppercase', fontWeight: 900, marginBottom: '8px' }}>No Submissions Yet</h3>
+                <p style={{ color: 'var(--text-muted)' }}>
+                  No students have completed or submitted this exam template.
+                </p>
+              </div>
+            ) : (
+              <div className="neo-card" style={{ padding: 0, overflow: 'hidden', borderCollapse: 'collapse', backgroundColor: '#ffffff' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f9fafb', borderBottom: '3px solid var(--border-color)' }}>
+                      <th style={{ padding: '16px 20px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.82rem' }}>Student Details</th>
+                      <th style={{ padding: '16px 20px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.82rem', width: '20%' }}>Score</th>
+                      <th style={{ padding: '16px 20px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.82rem', width: '20%' }}>Status</th>
+                      <th style={{ padding: '16px 20px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.82rem', width: '20%' }}>Submission Date</th>
+                      <th style={{ padding: '16px 20px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.82rem', width: '20%', textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {submissions.map((sub) => {
+                      const isGraded = sub.graded !== false;
+                      const formattedDate = new Date(sub.createdAt).toLocaleString();
+                      
+                      return (
+                        <tr key={sub.id} style={{ borderBottom: '2px solid var(--border-color)' }}>
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{sub.user?.name}</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>{sub.user?.email}</div>
+                          </td>
+                          <td style={{ padding: '16px 20px', fontWeight: 700 }}>
+                            {activeExam.type === 'SUBJECTIVE' && !isGraded ? (
+                              <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>—</span>
+                            ) : (
+                              <span>{sub.score} / {sub.totalPoints} pts</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '16px 20px' }}>
+                            {activeExam.type === 'SUBJECTIVE' ? (
+                              isGraded ? (
+                                <span className="neo-badge" style={{ backgroundColor: 'var(--accent-green)', color: 'var(--text-color)' }}>Graded</span>
+                              ) : (
+                                <span className="neo-badge" style={{ backgroundColor: 'var(--accent)', color: 'var(--text-color)' }}>Pending Grading</span>
+                              )
+                            ) : (
+                              <span className="neo-badge neo-badge-student">Auto-Graded</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                            {formattedDate}
+                          </td>
+                          <td style={{ padding: '12px 20px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => handleOpenGradingModal(sub)}
+                              className={`neo-btn ${activeExam.type === 'SUBJECTIVE' && !isGraded ? '' : 'neo-btn-secondary'}`}
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', transform: 'none' }}
+                            >
+                              {activeExam.type === 'SUBJECTIVE' ? (isGraded ? 'Revisit / Regrade' : 'Review & Grade') : 'Review Answers'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -1095,6 +1392,21 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                   placeholder="Brief exam synopsis or rules..."
                   style={{ minHeight: '80px', resize: 'vertical' }}
                 />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px', fontSize: '0.8rem' }}>
+                  Exam Type
+                </label>
+                <select
+                  value={formExamType}
+                  onChange={(e) => setFormExamType(e.target.value as 'MCQ' | 'SUBJECTIVE')}
+                  className="neo-select"
+                  disabled={examModalType === 'edit'}
+                >
+                  <option value="MCQ">MCQ Exam (Auto Graded)</option>
+                  <option value="SUBJECTIVE">Subjective Exam (Manually Graded)</option>
+                </select>
               </div>
 
               <div>
@@ -1231,7 +1543,7 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
             </button>
 
             <h2 style={{ textTransform: 'uppercase', fontWeight: 900, marginBottom: '20px', fontSize: '1.4rem' }}>
-              {questionModalType === 'create' ? 'Add MCQ Question' : 'Edit Question Details'}
+              {questionModalType === 'create' ? 'Add Question' : 'Edit Question'}
             </h2>
 
             {questionError && (
@@ -1258,6 +1570,61 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                   style={{ minHeight: '60px' }}
                 />
               </div>
+
+              {/* Question Type Selector */}
+              {activeExam?.type !== 'SUBJECTIVE' ? (
+                <div style={{ marginBottom: 4 }}>
+                  <label style={{ display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px', fontSize: '0.8rem' }}>
+                    Question Type
+                  </label>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    {(['MCQ', 'SUBJECTIVE'] as const).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setFormQType(t)}
+                        style={{
+                          flex: 1,
+                          padding: '10px 0',
+                          fontWeight: 900,
+                          fontSize: '0.85rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.06em',
+                          border: '2.5px solid var(--border-color)',
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          backgroundColor: formQType === t ? (t === 'MCQ' ? 'var(--primary)' : 'var(--accent)') : '#f4f4f4',
+                          boxShadow: formQType === t ? '3px 3px 0 var(--border-color)' : 'none',
+                          transition: 'all 0.1s ease',
+                        }}
+                      >
+                        {t === 'MCQ' ? '🔘 Multiple Choice' : '✍️ Subjective'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginBottom: 4 }}>
+                  <label style={{ display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px', fontSize: '0.8rem' }}>
+                    Question Type
+                  </label>
+                  <div style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#f3f4f6',
+                    borderRadius: 4,
+                    border: '2px solid var(--border-color)',
+                    fontWeight: 900,
+                    fontSize: '0.85rem',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span>✍️ Subjective Question (Locked by Exam Type)</span>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
@@ -1313,9 +1680,47 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                 </div>
               </div>
 
-              <h4 style={{ textTransform: 'uppercase', fontWeight: 900, borderBottom: '2px solid #ddd', paddingBottom: '6px', marginTop: '10px' }}>
-                MCQ Options (Exactly 4 choices)
-              </h4>
+              {/* ─── CONDITIONAL SECTION ─── */}
+              {formQType === 'SUBJECTIVE' ? (
+                <>
+                  <div style={{ backgroundColor: '#fef9e7', border: '2px dashed var(--border-color)', borderRadius: 6, padding: '12px 16px', fontSize: '0.82rem', color: '#555', fontWeight: 600 }}>
+                    ✍️ Students will type a text answer. Points are awarded automatically by keyword matching.
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px', fontSize: '0.8rem' }}>
+                      Model / Correct Answer
+                    </label>
+                    <textarea
+                      value={formQCorrectSubjectiveAnswer}
+                      onChange={(e) => setFormQCorrectSubjectiveAnswer(e.target.value)}
+                      className="neo-input"
+                      placeholder="Write the ideal expected answer here (used for exact-match grading)."
+                      style={{ minHeight: '80px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px', fontSize: '0.8rem' }}>
+                      Grading Keywords <span style={{ fontWeight: 500, textTransform: 'none', fontSize: '0.75rem', color: 'var(--text-muted)' }}>(comma-separated, e.g. &quot;hook, state, react&quot;)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formQCorrectAnswerKeywords}
+                      onChange={(e) => setFormQCorrectAnswerKeywords(e.target.value)}
+                      className="neo-input"
+                      placeholder="hook, state, useState, react"
+                    />
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                      Points are proportional to keywords matched. E.g. if 2 of 4 keywords match → student gets 50% of points.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h4 style={{ textTransform: 'uppercase', fontWeight: 900, borderBottom: '2px solid #ddd', paddingBottom: '6px', marginTop: '10px' }}>
+                    MCQ Options (Exactly 4 choices)
+                  </h4>
 
               {/* Options inputs */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -1462,7 +1867,9 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                     </div>
                   </div>
                 </div>
-              </div>
+                </div>
+                </>
+              )}
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '14px' }}>
                 <button type="submit" className="neo-btn" style={{ flex: 1 }}>
@@ -1536,6 +1943,174 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ─── MODAL: MANUAL SUBMISSION GRADING & REVIEW ──────────────────────── */}
+      {gradingModalOpen && activeSubmission && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1050, backdropFilter: 'blur(2px)'
+        }}>
+          <div className="neo-card" style={{ width: '90%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: '#ffffff', position: 'relative' }}>
+            <button
+              onClick={() => setGradingModalOpen(false)}
+              style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              <X size={20} />
+            </button>
+
+            <h2 style={{ textTransform: 'uppercase', fontWeight: 900, marginBottom: '8px', fontSize: '1.4rem' }}>
+              {activeExam?.type === 'SUBJECTIVE' ? 'Grade Student Answers' : 'Review Student Answers'}
+            </h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '0.9rem' }}>
+              Student: <span style={{ fontWeight: 800, color: 'var(--text-color)' }}>{activeSubmission.user?.name}</span> ({activeSubmission.user?.email})
+            </p>
+
+            {gradeSubmitError && (
+              <div className="neo-card" style={{
+                backgroundColor: 'var(--danger)', color: '#fff', padding: '12px', marginBottom: '20px',
+                fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--box-shadow-sm)'
+              }}>
+                <AlertCircle size={16} />
+                <span style={{ fontSize: '0.9rem' }}>{gradeSubmitError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleGradeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {activeExam?.questions.map((q: Question, idx: number) => {
+                  const studentAns = activeSubmission.answers.find((a: any) => a.questionId === q.id);
+                  const currentScore = gradingScores[q.id] ?? 0;
+                  
+                  return (
+                    <div key={q.id} className="neo-card" style={{
+                      backgroundColor: 'var(--bg-color)',
+                      border: '2px solid var(--border-color)',
+                      padding: '16px',
+                      borderRadius: 'var(--border-radius)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>Question {idx + 1}</span>
+                        <span className="neo-badge" style={{ backgroundColor: 'var(--secondary)', color: 'var(--text-color)', fontSize: '0.72rem' }}>
+                          Max Points: {q.points}
+                        </span>
+                      </div>
+                      
+                      <div style={{ fontWeight: 700, marginBottom: 12 }}>{q.text}</div>
+                      
+                      {/* Student's answer response */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Student's Answer:</div>
+                        <div style={{
+                          padding: '10px 12px',
+                          backgroundColor: '#ffffff',
+                          border: '2px solid var(--border-color)',
+                          borderRadius: 4,
+                          fontStyle: studentAns?.subjectiveAnswer ? 'normal' : 'italic',
+                          color: studentAns?.subjectiveAnswer ? 'inherit' : 'var(--text-muted)',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          {q.type === 'SUBJECTIVE' 
+                            ? (studentAns?.subjectiveAnswer || '(No answer provided)') 
+                            : (q.options.find(o => o.id === studentAns?.optionId)?.text || '(No option selected)')
+                          }
+                        </div>
+                      </div>
+
+                      {/* Model answer reference if subjective */}
+                      {q.type === 'SUBJECTIVE' && q.correctSubjectiveAnswer && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#065f46', marginBottom: 4 }}>Model Reference Answer:</div>
+                          <div style={{
+                            padding: '10px 12px',
+                            backgroundColor: '#e6fffa',
+                            border: '2px solid #319795',
+                            color: '#234e52',
+                            borderRadius: 4,
+                            whiteSpace: 'pre-wrap'
+                          }}>
+                            {q.correctSubjectiveAnswer}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Grading Input (only if Subjective Exam) */}
+                      {activeExam?.type === 'SUBJECTIVE' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div>
+                            <label style={{ display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px', fontSize: '0.75rem' }}>
+                              Assign Score (0 - {q.points})
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max={q.points}
+                              value={currentScore}
+                              onChange={(e) => {
+                                const val = Math.min(q.points, Math.max(0, Number(e.target.value)));
+                                setGradingScores(prev => ({
+                                  ...prev,
+                                  [q.id]: val
+                                }));
+                              }}
+                              className="neo-input"
+                              style={{ maxWidth: '120px', padding: '6px 10px' }}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px', fontSize: '0.75rem' }}>
+                              Teacher Feedback (Optional)
+                            </label>
+                            <textarea
+                              value={gradingFeedbacks[q.id] || ''}
+                              onChange={(e) => {
+                                setGradingFeedbacks(prev => ({
+                                  ...prev,
+                                  [q.id]: e.target.value
+                                }));
+                              }}
+                              className="neo-input"
+                              placeholder="Add suggestions, comments, or corrections..."
+                              style={{ minHeight: '60px', resize: 'vertical' }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          Points Earned (Auto): <span style={{ fontWeight: 800, color: 'var(--text-color)' }}>{studentAns?.optionId === q.correctOptionId ? q.points : 0} / {q.points}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {activeExam?.type === 'SUBJECTIVE' && (
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setGradingModalOpen(false)}
+                    className="neo-btn neo-btn-secondary"
+                    style={{ padding: '8px 16px' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={gradeSubmitLoading}
+                    className="neo-btn"
+                    style={{ padding: '8px 24px' }}
+                  >
+                    {gradeSubmitLoading ? 'Saving...' : 'Submit Grades'}
+                  </button>
+                </div>
+              )}
+            </form>
           </div>
         </div>
       )}

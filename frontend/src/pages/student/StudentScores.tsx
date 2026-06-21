@@ -10,6 +10,7 @@ interface ExamDetail {
   title: string;
   totalPoints: number;
   score: number | null;
+  graded?: boolean;
   status: 'AVAILABLE' | 'COMPLETED' | 'TERMINATED' | 'SCHEDULED' | 'EXPIRED';
   dateTaken: string | null;
 }
@@ -438,20 +439,24 @@ const StudentScores: React.FC = () => {
                                         </td>
                                         <td style={{ padding: '14px 16px', fontWeight: 800 }}>
                                           {exam.score !== null ? (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                              <span style={{ fontSize: '1rem', color: 'var(--primary)' }}>{exam.score}</span>
-                                              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500 }}>/ {exam.totalPoints} pts</span>
-                                              <span style={{
-                                                backgroundColor: 'var(--accent)',
-                                                borderRadius: '4px',
-                                                border: '1px solid var(--border-color)',
-                                                padding: '1px 5px',
-                                                fontSize: '0.72rem',
-                                                fontWeight: 800
-                                              }}>
-                                                {Math.round((exam.score / exam.totalPoints) * 100)}%
-                                              </span>
-                                            </div>
+                                            exam.graded === false ? (
+                                              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Pending Grading</span>
+                                            ) : (
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{ fontSize: '1rem', color: 'var(--primary)' }}>{exam.score}</span>
+                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500 }}>/ {exam.totalPoints} pts</span>
+                                                <span style={{
+                                                  backgroundColor: 'var(--accent)',
+                                                  borderRadius: '4px',
+                                                  border: '1px solid var(--border-color)',
+                                                  padding: '1px 5px',
+                                                  fontSize: '0.72rem',
+                                                  fontWeight: 800
+                                                }}>
+                                                  {Math.round((exam.score / exam.totalPoints) * 100)}%
+                                                </span>
+                                              </div>
+                                            )
                                           ) : isTerminated ? (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--danger)' }}>
                                               <AlertTriangle size={14} />

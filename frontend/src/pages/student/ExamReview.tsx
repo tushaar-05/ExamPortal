@@ -31,9 +31,17 @@ interface QuestionReview {
   imageUrl?: string | null;
   difficulty?: string | null;
   points: number;
+  type?: 'MCQ' | 'SUBJECTIVE';
+  // MCQ fields
   options: OptionData[];
   correctOptionId: string;
   selectedOptionId: string | null;
+  // Subjective fields
+  subjectiveAnswer?: string | null;
+  correctSubjectiveAnswer?: string | null;
+  correctAnswerKeywords?: string | null;
+  pointsEarned?: number | null;
+  feedback?: string | null;
 }
 
 interface ReviewPayload {
@@ -42,6 +50,8 @@ interface ReviewPayload {
   score: number;
   durationMinutes: number;
   dateSubmitted: string;
+  graded?: boolean;
+  type?: 'MCQ' | 'SUBJECTIVE';
   questions: QuestionReview[];
 }
 
@@ -222,9 +232,25 @@ const ExamReview: React.FC = () => {
           </div>
         )}
 
-        {/* ── Content ── */}
         {!loading && data && stats && (
           <div>
+            {!data.graded ? (
+              <div className="neo-card" style={{
+                backgroundColor: 'var(--bg-color)',
+                border: '2.5px solid var(--border-color)',
+                padding: '40px',
+                textAlign: 'center',
+                marginTop: '30px'
+              }}>
+                <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⏳</div>
+                <h2 style={{ textTransform: 'uppercase', fontWeight: 900, marginBottom: '12px' }}>Pending Review</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '1.05rem', maxWidth: '500px', margin: '0 auto', lineHeight: '1.6' }}>
+                  Your answers are awaiting evaluation by the instructor. Once the grading is completed by the teacher, your answers, scores, and feedback will be visible here.
+                </p>
+              </div>
+            ) : (
+              <div>
+
             {/* ── Summary Cards ── */}
             <div style={{
               display: 'grid',
@@ -234,7 +260,7 @@ const ExamReview: React.FC = () => {
             }}>
               {/* Score */}
               <div className="neo-card" style={{
-                backgroundColor: scoreColor(stats.pct),
+                backgroundColor: !data.graded ? '#f3f4f6' : scoreColor(stats.pct),
                 display: 'flex', alignItems: 'center', gap: '14px', padding: '20px 24px',
               }}>
                 <div style={{
@@ -246,9 +272,13 @@ const ExamReview: React.FC = () => {
                 <div>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Final Score</div>
                   <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>
-                    {data.score} <span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--text-muted)' }}>/ {data.totalPoints}</span>
+                    {!data.graded ? (
+                      <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>Pending</span>
+                    ) : (
+                      <>{data.score} <span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--text-muted)' }}>/ {data.totalPoints}</span></>
+                    )}
                   </div>
-                  <div style={{ fontSize: '1rem', fontWeight: 800 }}>{stats.pct}%</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 800 }}>{!data.graded ? '—' : `${stats.pct}%`}</div>
                 </div>
               </div>
 
@@ -418,82 +448,187 @@ const ExamReview: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Options */}
-                    <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {q.options.map((opt) => {
-                        const isSelected = opt.id === q.selectedOptionId;
-                        const isCorrectOpt = opt.id === q.correctOptionId;
-
-                        let optBg = '#f9f9f9';
-                        let optBorder = 'var(--border-color)';
-                        let optBorderWidth = '2px';
-                        let icon: React.ReactNode = null;
-                        let labelText = '';
-
-                        if (isCorrectOpt && isSelected) {
-                          // Student chose correctly
-                          optBg = '#d1fae5';
-                          optBorder = '#059669';
-                          optBorderWidth = '3px';
-                          icon = <CheckCircle size={18} color="#059669" />;
-                          labelText = 'Your answer ✓';
-                        } else if (isSelected && !isCorrectOpt) {
-                          // Student chose wrong
-                          optBg = '#fee2e2';
-                          optBorder = '#dc2626';
-                          optBorderWidth = '3px';
-                          icon = <XCircle size={18} color="#dc2626" />;
-                          labelText = 'Your answer ✗';
-                        } else if (isCorrectOpt) {
-                          // Correct answer (student didn't pick it)
-                          optBg = '#dbeafe';
-                          optBorder = '#2563eb';
-                          optBorderWidth = '3px';
-                          icon = <CheckCircle size={18} color="#2563eb" />;
-                          labelText = 'Correct answer';
-                        }
-
-                        return (
-                          <div
-                            key={opt.id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: '12px',
-                              padding: '12px 16px',
-                              backgroundColor: optBg,
-                              border: `${optBorderWidth} solid ${optBorder}`,
-                              borderRadius: '6px',
-                              transition: 'none',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
-                              {icon ? icon : (
-                                <div style={{ width: 18, height: 18, border: '2px solid var(--border-color)', borderRadius: '50%', flexShrink: 0 }} />
-                              )}
-                              <span style={{ fontWeight: (isCorrectOpt || isSelected) ? 800 : 500, fontSize: '0.95rem' }}>
-                                {opt.text}
-                              </span>
-                            </div>
-                            {labelText && (
-                              <span style={{
-                                fontSize: '0.72rem',
-                                fontWeight: 900,
-                                textTransform: 'uppercase',
-                                color: isSelected && !isCorrectOpt ? '#dc2626' : isCorrectOpt && isSelected ? '#059669' : '#2563eb',
-                                whiteSpace: 'nowrap',
-                                border: `1px solid currentColor`,
-                                borderRadius: '4px',
-                                padding: '2px 6px',
-                              }}>
-                                {labelText}
-                              </span>
-                            )}
+                    {/* Options or Subjective review */}
+                    {q.type === 'SUBJECTIVE' ? (
+                      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {/* Student's answer */}
+                        <div style={{
+                          border: '2px solid var(--border-color)',
+                          borderRadius: 6,
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{
+                            backgroundColor: '#f3f4f6',
+                            padding: '8px 16px',
+                            fontSize: '0.72rem',
+                            fontWeight: 900,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            color: 'var(--text-muted)',
+                            borderBottom: '2px solid var(--border-color)',
+                          }}>Your Answer</div>
+                          <div style={{ padding: '14px 16px', fontWeight: 600, whiteSpace: 'pre-wrap', minHeight: 60, color: q.subjectiveAnswer ? 'inherit' : '#9ca3af' }}>
+                            {q.subjectiveAnswer || 'No answer provided.'}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+
+                        {/* Model answer */}
+                        <div style={{
+                          border: '2px solid #059669',
+                          borderRadius: 6,
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{
+                            backgroundColor: '#d1fae5',
+                            padding: '8px 16px',
+                            fontSize: '0.72rem',
+                            fontWeight: 900,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            color: '#065f46',
+                            borderBottom: '2px solid #059669',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}>
+                            <span>Model Answer</span>
+                            <span style={{
+                              background: '#fff',
+                              border: '1.5px solid #059669',
+                              borderRadius: 4,
+                              padding: '1px 8px',
+                              color: '#059669',
+                              fontWeight: 900,
+                            }}>
+                              {q.pointsEarned != null ? `${q.pointsEarned} / ${q.points} pts earned` : `${q.points} pts`}
+                            </span>
+                          </div>
+                          <div style={{ padding: '14px 16px', fontWeight: 600, whiteSpace: 'pre-wrap', color: q.correctSubjectiveAnswer ? 'inherit' : '#9ca3af' }}>
+                            {q.correctSubjectiveAnswer || 'No model answer was set.'}
+                          </div>
+                        </div>
+
+                        {/* Teacher Feedback */}
+                        {q.feedback && (
+                          <div style={{
+                            border: '2px solid var(--border-color)',
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                          }}>
+                            <div style={{
+                              backgroundColor: 'var(--secondary)',
+                              padding: '8px 16px',
+                              fontSize: '0.72rem',
+                              fontWeight: 900,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.06em',
+                              color: 'var(--text-color)',
+                              borderBottom: '2px solid var(--border-color)',
+                            }}>Teacher Feedback</div>
+                            <div style={{ padding: '14px 16px', fontWeight: 600, whiteSpace: 'pre-wrap', color: 'var(--text-color)' }}>
+                              {q.feedback}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Keywords */}
+                        {data.type !== 'SUBJECTIVE' && q.correctAnswerKeywords && (
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Grading Keywords:</span>
+                            {q.correctAnswerKeywords.split(',').map(kw => kw.trim()).filter(k => k).map(kw => {
+                              const matched = (q.subjectiveAnswer || '').toLowerCase().includes(kw.toLowerCase());
+                              return (
+                                <span key={kw} style={{
+                                  backgroundColor: matched ? '#d1fae5' : '#fee2e2',
+                                  border: `1.5px solid ${matched ? '#059669' : '#dc2626'}`,
+                                  borderRadius: 4,
+                                  padding: '2px 8px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 800,
+                                  color: matched ? '#065f46' : '#991b1b',
+                                }}>
+                                  {matched ? '✓' : '✗'} {kw}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* MCQ Options */
+                      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {q.options.map((opt) => {
+                          const isSelected = opt.id === q.selectedOptionId;
+                          const isCorrectOpt = opt.id === q.correctOptionId;
+
+                          let optBg = '#f9f9f9';
+                          let optBorder = 'var(--border-color)';
+                          let optBorderWidth = '2px';
+                          let icon: React.ReactNode = null;
+                          let labelText = '';
+
+                          if (isCorrectOpt && isSelected) {
+                            optBg = '#d1fae5';
+                            optBorder = '#059669';
+                            optBorderWidth = '3px';
+                            icon = <CheckCircle size={18} color="#059669" />;
+                            labelText = 'Your answer ✓';
+                          } else if (isSelected && !isCorrectOpt) {
+                            optBg = '#fee2e2';
+                            optBorder = '#dc2626';
+                            optBorderWidth = '3px';
+                            icon = <XCircle size={18} color="#dc2626" />;
+                            labelText = 'Your answer ✗';
+                          } else if (isCorrectOpt) {
+                            optBg = '#dbeafe';
+                            optBorder = '#2563eb';
+                            optBorderWidth = '3px';
+                            icon = <CheckCircle size={18} color="#2563eb" />;
+                            labelText = 'Correct answer';
+                          }
+
+                          return (
+                            <div
+                              key={opt.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                padding: '12px 16px',
+                                backgroundColor: optBg,
+                                border: `${optBorderWidth} solid ${optBorder}`,
+                                borderRadius: '6px',
+                                transition: 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                                {icon ? icon : (
+                                  <div style={{ width: 18, height: 18, border: '2px solid var(--border-color)', borderRadius: '50%', flexShrink: 0 }} />
+                                )}
+                                <span style={{ fontWeight: (isCorrectOpt || isSelected) ? 800 : 500, fontSize: '0.95rem' }}>
+                                  {opt.text}
+                                </span>
+                              </div>
+                              {labelText && (
+                                <span style={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 900,
+                                  textTransform: 'uppercase',
+                                  color: isSelected && !isCorrectOpt ? '#dc2626' : isCorrectOpt && isSelected ? '#059669' : '#2563eb',
+                                  whiteSpace: 'nowrap',
+                                  border: `1px solid currentColor`,
+                                  borderRadius: '4px',
+                                  padding: '2px 6px',
+                                }}>
+                                  {labelText}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -507,6 +642,8 @@ const ExamReview: React.FC = () => {
                 </button>
               </Link>
             </div>
+              </div>
+            )}
           </div>
         )}
       </main>
