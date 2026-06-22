@@ -14,6 +14,7 @@ interface Exam {
   startTime?: string | null;
   endTime?: string | null;
   score?: string;
+  type?: 'MCQ' | 'SUBJECTIVE' | null;
 }
 
 const StudentDashboard: React.FC = () => {
@@ -175,6 +176,11 @@ const StudentDashboard: React.FC = () => {
                 const isScheduled = exam.status === 'SCHEDULED';
                 const isExpired = exam.status === 'EXPIRED';
 
+                const isMCQ = exam.type !== 'SUBJECTIVE';
+                const hasEndTime = !!exam.endTime;
+                const isBeforeDeadline = hasEndTime && new Date() < new Date(exam.endTime!);
+                const isReviewBlocked = isMCQ && isBeforeDeadline;
+
                 // Badge color
                 const badgeStyle: React.CSSProperties = {
                   ...(
@@ -279,6 +285,19 @@ const StudentDashboard: React.FC = () => {
                     ) : isTerminated ? (
                       <button disabled className="neo-btn" style={{ width: '100%', padding: '10px', backgroundColor: '#ffe0e0', boxShadow: 'none', cursor: 'not-allowed', transform: 'none', color: '#b22222' }}>
                         ⛔ Session Terminated
+                      </button>
+                    ) : isReviewBlocked ? (
+                      <button disabled className="neo-btn" style={{
+                        width: '100%',
+                        padding: '10px',
+                        backgroundColor: '#f3f4f6',
+                        color: 'var(--text-muted)',
+                        boxShadow: 'none',
+                        border: '2px solid var(--border-color)',
+                        cursor: 'not-allowed',
+                        transform: 'none',
+                      }}>
+                        Review after {formatDt(exam.endTime!)}
                       </button>
                     ) : (
                       <Link

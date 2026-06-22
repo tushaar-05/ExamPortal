@@ -46,6 +46,8 @@ export const getStudentExams = async (req: AuthenticatedRequest, res: Response) 
         status = 'EXPIRED';
       }
       
+      const isReviewBlocked = exam.type !== 'SUBJECTIVE' && exam.endTime && now < new Date(exam.endTime);
+
       return {
         id: exam.id,
         title: exam.title,
@@ -55,10 +57,13 @@ export const getStudentExams = async (req: AuthenticatedRequest, res: Response) 
         endTime: exam.endTime,
         subject: exam.subject,
         status,
+        type: exam.type,
         score: submission ? (
-          exam.type === 'SUBJECTIVE' && submission.graded === false
-            ? "Pending Grading"
-            : `${submission.score} / ${submission.totalPoints}`
+          isReviewBlocked
+            ? "Released after deadline"
+            : (exam.type === 'SUBJECTIVE' && submission.graded === false
+                ? "Pending Grading"
+                : `${submission.score} / ${submission.totalPoints}`)
         ) : undefined
       };
     });
@@ -352,8 +357,12 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
       let totalAchievedPoints = 0;
       
       subjectSubmissions.forEach(sub => {
-        totalMaxPoints += sub.totalPoints;
-        totalAchievedPoints += sub.score;
+        const exam = subjectExams.find(e => e.id === sub.examId);
+        const isReviewBlocked = exam && exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
+        if (!isReviewBlocked) {
+          totalMaxPoints += sub.totalPoints;
+          totalAchievedPoints += sub.score;
+        }
       });
 
       const averagePercentage = totalMaxPoints > 0 
@@ -380,6 +389,8 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           }
         }
 
+        const isReviewBlocked = exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
+
         return {
           id: exam.id,
           title: exam.title,
@@ -388,6 +399,7 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           graded: sub ? (sub.graded !== false) : true,
           status,
           dateTaken: sub ? sub.createdAt : null,
+          releaseBlocked: !!(sub && isReviewBlocked),
         };
       });
 
@@ -412,8 +424,12 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
       let totalMaxPoints = 0;
       let totalAchievedPoints = 0;
       otherSubmissions.forEach(sub => {
-        totalMaxPoints += sub.totalPoints;
-        totalAchievedPoints += sub.score;
+        const exam = otherExams.find(e => e.id === sub.examId);
+        const isReviewBlocked = exam && exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
+        if (!isReviewBlocked) {
+          totalMaxPoints += sub.totalPoints;
+          totalAchievedPoints += sub.score;
+        }
       });
 
       const averagePercentage = totalMaxPoints > 0 
@@ -438,6 +454,8 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           }
         }
 
+        const isReviewBlocked = exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
+
         return {
           id: exam.id,
           title: exam.title,
@@ -446,6 +464,7 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           graded: sub ? (sub.graded !== false) : true,
           status,
           dateTaken: sub ? sub.createdAt : null,
+          releaseBlocked: !!(sub && isReviewBlocked),
         };
       });
 
@@ -494,6 +513,13 @@ export const getSubmissionReview = async (req: AuthenticatedRequest, res: Respon
 
     if (!exam) {
       return res.status(404).json({ message: 'Exam not found' });
+    }
+
+    // Block review for MCQ exams if they are accessed before the deadline (endTime)
+    if (exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime)) {
+      return res.status(403).json({
+        message: `Review is not allowed until after the exam deadline: ${new Date(exam.endTime).toLocaleString()}`
+      });
     }
 
     // Match each question with the student's selection
@@ -614,7 +640,7 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
 
     // Fetch all exams for subject mapping
     const allExams = await prisma.exam.findMany({
-      select: { id: true, subject: true },
+      select: { id: true, subject: true, type: true, endTime: true },
     });
     const examSubjectMap = new Map(allExams.map(e => [e.id, e.subject ?? 'Unassigned']));
 
@@ -630,12 +656,17 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
       SUBJECTS.forEach(s => { subjectScores[s] = { earned: 0, possible: 0 }; });
 
       subs.forEach(sub => {
-        totalEarned   += sub.score;
-        totalPossible += sub.totalPoints;
-        const subject = examSubjectMap.get(sub.examId) ?? 'Unassigned';
-        if (subjectScores[subject]) {
-          subjectScores[subject].earned   += sub.score;
-          subjectScores[subject].possible += sub.totalPoints;
+        const exam = allExams.find(e => e.id === sub.examId);
+        const isReviewBlocked = exam && exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
+
+        if (!isReviewBlocked) {
+          totalEarned   += sub.score;
+          totalPossible += sub.totalPoints;
+          const subject = examSubjectMap.get(sub.examId) ?? 'Unassigned';
+          if (subjectScores[subject]) {
+            subjectScores[subject].earned   += sub.score;
+            subjectScores[subject].possible += sub.totalPoints;
+          }
         }
       });
 
