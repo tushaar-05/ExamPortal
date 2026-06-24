@@ -13,7 +13,6 @@ interface ExamDetail {
   graded?: boolean;
   status: 'AVAILABLE' | 'COMPLETED' | 'TERMINATED' | 'SCHEDULED' | 'EXPIRED';
   dateTaken: string | null;
-  releaseBlocked?: boolean;
 }
 
 interface SubjectStat {
@@ -97,10 +96,8 @@ const StudentScores: React.FC = () => {
       totalAvailable += stat.totalExams;
       stat.exams.forEach(exam => {
         if (exam.score !== null) {
-          if (!exam.releaseBlocked) {
-            totalEarned += exam.score;
-            totalPossible += exam.totalPoints;
-          }
+          totalEarned += exam.score;
+          totalPossible += exam.totalPoints;
           completedCount++;
         }
       });
@@ -442,9 +439,7 @@ const StudentScores: React.FC = () => {
                                         </td>
                                         <td style={{ padding: '14px 16px', fontWeight: 800 }}>
                                           {exam.score !== null ? (
-                                            exam.releaseBlocked ? (
-                                              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Awaiting Deadline</span>
-                                            ) : exam.graded === false ? (
+                                            exam.graded === false ? (
                                               <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Pending Grading</span>
                                             ) : (
                                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

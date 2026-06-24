@@ -46,21 +46,30 @@ const SubjectBar: React.FC<{ label: string; pct: number | null }> = ({ label, pc
   <div style={{ marginBottom: 6 }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 700, marginBottom: 3 }}>
       <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-      <span style={{ color: pct !== null ? pctColor(pct) : '#9ca3af' }}>
-        {pct !== null ? `${pct}%` : '—'}
+      <span style={{ color: pct !== null ? pctColor(pct) : '#c4c4c4', fontStyle: pct === null ? 'italic' : 'normal' }}>
+        {pct !== null ? `${pct}%` : 'Not taken'}
       </span>
     </div>
-    <div style={{ height: 6, backgroundColor: '#e5e7eb', borderRadius: 99, overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-      <div style={{
-        height: '100%',
-        width: `${pct ?? 0}%`,
-        backgroundColor: pct !== null ? pctColor(pct) : '#e5e7eb',
-        borderRadius: 99,
-        transition: 'width 0.6s ease',
-      }} />
+    <div style={{
+      height: 6,
+      backgroundColor: '#e5e7eb',
+      borderRadius: 99,
+      overflow: 'hidden',
+      border: pct === null ? '1px dashed #c4c4c4' : '1px solid var(--border-color)',
+    }}>
+      {pct !== null && (
+        <div style={{
+          height: '100%',
+          width: `${pct}%`,
+          backgroundColor: pctColor(pct),
+          borderRadius: 99,
+          transition: 'width 0.6s ease',
+        }} />
+      )}
     </div>
   </div>
 );
+
 
 // ─── Podium column (top 3) ───────────────────────────────────────────────────
 const PodiumColumn: React.FC<{ entry: LeaderboardEntry; rank: number; isSelf: boolean }> = ({ entry, rank, isSelf }) => {

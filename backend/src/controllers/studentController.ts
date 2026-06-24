@@ -59,11 +59,9 @@ export const getStudentExams = async (req: AuthenticatedRequest, res: Response) 
         status,
         type: exam.type,
         score: submission ? (
-          isReviewBlocked
-            ? "Released after deadline"
-            : (exam.type === 'SUBJECTIVE' && submission.graded === false
-                ? "Pending Grading"
-                : `${submission.score} / ${submission.totalPoints}`)
+          exam.type === 'SUBJECTIVE' && submission.graded === false
+            ? "Pending Grading"
+            : `${submission.score} / ${submission.totalPoints}`
         ) : undefined
       };
     });
@@ -357,12 +355,8 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
       let totalAchievedPoints = 0;
       
       subjectSubmissions.forEach(sub => {
-        const exam = subjectExams.find(e => e.id === sub.examId);
-        const isReviewBlocked = exam && exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
-        if (!isReviewBlocked) {
-          totalMaxPoints += sub.totalPoints;
-          totalAchievedPoints += sub.score;
-        }
+        totalMaxPoints += sub.totalPoints;
+        totalAchievedPoints += sub.score;
       });
 
       const averagePercentage = totalMaxPoints > 0 
@@ -389,8 +383,6 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           }
         }
 
-        const isReviewBlocked = exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
-
         return {
           id: exam.id,
           title: exam.title,
@@ -399,7 +391,6 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           graded: sub ? (sub.graded !== false) : true,
           status,
           dateTaken: sub ? sub.createdAt : null,
-          releaseBlocked: !!(sub && isReviewBlocked),
         };
       });
 
@@ -424,12 +415,8 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
       let totalMaxPoints = 0;
       let totalAchievedPoints = 0;
       otherSubmissions.forEach(sub => {
-        const exam = otherExams.find(e => e.id === sub.examId);
-        const isReviewBlocked = exam && exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
-        if (!isReviewBlocked) {
-          totalMaxPoints += sub.totalPoints;
-          totalAchievedPoints += sub.score;
-        }
+        totalMaxPoints += sub.totalPoints;
+        totalAchievedPoints += sub.score;
       });
 
       const averagePercentage = totalMaxPoints > 0 
@@ -454,8 +441,6 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           }
         }
 
-        const isReviewBlocked = exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
-
         return {
           id: exam.id,
           title: exam.title,
@@ -464,7 +449,6 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           graded: sub ? (sub.graded !== false) : true,
           status,
           dateTaken: sub ? sub.createdAt : null,
-          releaseBlocked: !!(sub && isReviewBlocked),
         };
       });
 
@@ -635,7 +619,7 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
 
     // Fetch all submissions
     const allSubmissions = await prisma.examSubmission.findMany({
-      select: { userId: true, score: true, totalPoints: true, examId: true },
+      select: { userId: true, score: true, totalPoints: true, examId: true, createdAt: true },
     });
 
     // Fetch all exams for subject mapping
@@ -656,23 +640,22 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
       SUBJECTS.forEach(s => { subjectScores[s] = { earned: 0, possible: 0 }; });
 
       subs.forEach(sub => {
-        const exam = allExams.find(e => e.id === sub.examId);
-        const isReviewBlocked = exam && exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime);
-
-        if (!isReviewBlocked) {
-          totalEarned   += sub.score;
-          totalPossible += sub.totalPoints;
-          const subject = examSubjectMap.get(sub.examId) ?? 'Unassigned';
-          if (subjectScores[subject]) {
-            subjectScores[subject].earned   += sub.score;
-            subjectScores[subject].possible += sub.totalPoints;
-          }
+        totalEarned   += sub.score;
+        totalPossible += sub.totalPoints;
+        const subject = examSubjectMap.get(sub.examId) ?? 'Unassigned';
+        if (subjectScores[subject]) {
+          subjectScores[subject].earned   += sub.score;
+          subjectScores[subject].possible += sub.totalPoints;
         }
       });
 
       const overallPct = totalPossible > 0
         ? Math.round((totalEarned / totalPossible) * 100)
         : 0;
+
+      const lastSubmissionTime = subs.length > 0
+        ? Math.max(...subs.map(s => new Date(s.createdAt).getTime()))
+        : Infinity;
 
       return {
         id:           student.id,
@@ -682,6 +665,7 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
         totalEarned,
         totalPossible,
         overallPct,
+        lastSubmissionTime,
         subjectScores: SUBJECTS.map(s => ({
           subject:  s,
           earned:   subjectScores[s].earned,
@@ -693,14 +677,16 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
       };
     });
 
-    // Sort: by overallPct desc, then examsCompleted desc, then name asc
-    ranked.sort((a, b) =>
-      b.overallPct !== a.overallPct
-        ? b.overallPct - a.overallPct
-        : b.examsCompleted !== a.examsCompleted
-          ? b.examsCompleted - a.examsCompleted
-          : a.name.localeCompare(b.name)
-    );
+    // Sort: by overallPct desc, then lastSubmissionTime asc (person who finished early), then name asc
+    ranked.sort((a, b) => {
+      if (b.overallPct !== a.overallPct) {
+        return b.overallPct - a.overallPct;
+      }
+      if (a.lastSubmissionTime !== b.lastSubmissionTime) {
+        return a.lastSubmissionTime - b.lastSubmissionTime;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
     return res.status(200).json({ leaderboard: ranked });
   } catch (err) {
