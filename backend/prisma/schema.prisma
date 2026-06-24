@@ -71,6 +71,8 @@ model ExamSubmission {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   userId      String   @db.ObjectId
   examId      String   @db.ObjectId
+  userName    String?  // denormalised for quick admin queries
+  userEmail   String?  // denormalised for quick admin queries
   score       Int
   totalPoints Int
   answers     Answer[]
@@ -85,6 +87,8 @@ model ExamAttempt {
   id               String      @id @default(auto()) @map("_id") @db.ObjectId
   userId           String      @db.ObjectId
   examId           String      @db.ObjectId
+  userName         String?     // denormalised for quick admin queries
+  userEmail        String?     // denormalised for quick admin queries
   remainingChances Int         @default(3)
   status           String      @default("STARTED") // 'STARTED' | 'SUBMITTED' | 'TERMINATED'
   createdAt        DateTime    @default(now())
@@ -99,6 +103,8 @@ model Violation {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   attemptId String   @db.ObjectId
   userId    String   @db.ObjectId
+  userName  String?  // denormalised for quick admin queries
+  userEmail String?  // denormalised for quick admin queries
   type      String   // FULLSCREEN_EXIT, TAB_SWITCH, COPY_ATTEMPT, PASTE_ATTEMPT, CUT_ATTEMPT, WINDOW_BLUR
   timestamp DateTime @default(now())
   metadata  String?
@@ -110,6 +116,8 @@ model Feedback {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   examId    String   @db.ObjectId
   userId    String   @db.ObjectId
+  userName  String?  // denormalised for quick admin queries
+  userEmail String?  // denormalised for quick admin queries
   rating    Int      // 1–5
   message   String?
   createdAt DateTime @default(now())

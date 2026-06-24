@@ -32,11 +32,14 @@ export const logViolation = async (req: AuthenticatedRequest, res: Response) => 
       return res.status(400).json({ message: 'This exam session is not active.' });
     }
 
-    // Create the Violation
+    // Create the Violation — include denormalised user identity
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
     await prisma.violation.create({
       data: {
         attemptId,
         userId,
+        userName:  user?.name  ?? undefined,
+        userEmail: user?.email ?? undefined,
         type,
         timestamp: timestamp ? new Date(timestamp) : new Date(),
         metadata: metadata ? String(metadata) : undefined

@@ -100,10 +100,14 @@ export const getExamForSession = async (req: AuthenticatedRequest, res: Response
         return res.status(403).json({ message: 'This exam is locked or has already been completed.' });
       }
     } else {
+      // Fetch user name/email to denormalise onto the attempt record
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
       attempt = await prisma.examAttempt.create({
         data: {
           userId,
           examId: id,
+          userName:  user?.name  ?? undefined,
+          userEmail: user?.email ?? undefined,
           remainingChances: 3,
           status: 'STARTED'
         }
@@ -257,11 +261,14 @@ export const submitExam = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    // Create submission
+    // Create submission — include denormalised user identity
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
     const submission = await prisma.examSubmission.create({
       data: {
         userId,
         examId: id,
+        userName:  user?.name  ?? undefined,
+        userEmail: user?.email ?? undefined,
         score,
         totalPoints: exam.totalPoints,
         answers: validatedData.answers.map(ans => ({

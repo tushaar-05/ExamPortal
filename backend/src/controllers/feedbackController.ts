@@ -15,10 +15,14 @@ export const submitFeedback = async (req: AuthenticatedRequest, res: Response) =
       return res.status(400).json({ message: 'Invalid feedback payload. Rating must be between 1 and 5.' });
     }
 
+    // Include denormalised user identity on the feedback record
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
     await prisma.feedback.create({
       data: {
         examId,
         userId,
+        userName:  user?.name  ?? undefined,
+        userEmail: user?.email ?? undefined,
         rating,
         message: message ? String(message) : undefined,
       },
