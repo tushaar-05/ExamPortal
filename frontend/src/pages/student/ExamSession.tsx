@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Clock, AlertCircle, CheckCircle, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Clock, AlertCircle, CheckCircle, ChevronLeft, ChevronRight, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 
 interface Option {
@@ -30,6 +30,44 @@ interface Exam {
 
 const LABELS = ['A', 'B', 'C', 'D', 'E'];
 
+// ── LocalStorage helpers ─────────────────────────────────────────────────────
+const lsKey = (examId: string) => `exam_draft_${examId}`;
+
+function saveDraft(examId: string, answers: Record<string, string | null>, subjectiveAnswers: Record<string, string>, timeLeft: number | null) {
+  try {
+    localStorage.setItem(lsKey(examId), JSON.stringify({ answers, subjectiveAnswers, timeLeft, savedAt: Date.now() }));
+  } catch { /* storage full – ignore */ }
+}
+
+function loadDraft(examId: string) {
+  try {
+    const raw = localStorage.getItem(lsKey(examId));
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    // Discard drafts older than 8 hours
+    if (Date.now() - d.savedAt > 8 * 60 * 60 * 1000) { localStorage.removeItem(lsKey(examId)); return null; }
+    return d as { answers: Record<string, string | null>; subjectiveAnswers: Record<string, string>; timeLeft: number | null };
+  } catch { return null; }
+}
+
+function clearDraft(examId: string) {
+  try { localStorage.removeItem(lsKey(examId)); } catch { /* ignore */ }
+}
+
+// ── Retry-capable fetch ──────────────────────────────────────────────────────
+async function apiFetchWithRetry(path: string, init: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await apiFetch(path, init);
+      return res;
+    } catch (err) {
+      if (i === retries) throw err;
+      await new Promise(r => setTimeout(r, 1200 * (i + 1))); // back-off: 1.2s, 2.4s
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 const ExamSession: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -55,9 +93,13 @@ const ExamSession: React.FC = () => {
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [showWarningModal, setShowWarningModal] = useState<boolean>(false);
   const [lastViolationType, setLastViolationType] = useState<string>('');
-  const [showToast, setShowToast] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState<{ msg: string; type: 'warn' | 'info' | 'error' } | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const windowViolationFiredRef = useRef<boolean>(false);
+  // When true, all violation/pause detection is silenced (e.g. during submit flow)
+  const isSubmittingRef = useRef<boolean>(false);
+  // Blur debounce: ignore focus losses shorter than this duration (ms)
+  const blurDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Submit confirmation modal
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -67,6 +109,12 @@ const ExamSession: React.FC = () => {
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+
+  // Offline / network state
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // Draft restored banner
+  const [draftRestored, setDraftRestored] = useState(false);
 
   // Camera & proctoring states
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -145,11 +193,43 @@ const ExamSession: React.FC = () => {
     }
   }, [result, cameraStream]);
 
+  // ── Network online / offline monitoring ─────────────────────────────────────
+  useEffect(() => {
+    const handleOnline  = () => { setIsOnline(true);  triggerToast('Connection restored. You are back online.', 'info'); };
+    const handleOffline = () => { setIsOnline(false); triggerToast('You are offline! Your answers are saved locally and will sync when connection returns.', 'error'); };
+    window.addEventListener('online',  handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online',  handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // ── Auto-save answers to localStorage every 15 seconds ──────────────────────
+  useEffect(() => {
+    if (!exam || result) return;
+    const interval = setInterval(() => {
+      saveDraft(exam.id, answers, subjectiveAnswers, timeLeft);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [exam, answers, subjectiveAnswers, timeLeft, result]);
+
+  // Also save immediately when answers change (debounced 2 seconds)
+  const draftSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!exam || result) return;
+    if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current);
+    draftSaveTimeout.current = setTimeout(() => {
+      saveDraft(exam.id, answers, subjectiveAnswers, timeLeft);
+    }, 2000);
+    return () => { if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current); };
+  }, [answers, subjectiveAnswers]);
+
   // Trigger temporary warning toast
-  const triggerToast = (msg: string) => {
+  const triggerToast = (msg: string, type: 'warn' | 'info' | 'error' = 'warn') => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    setShowToast(msg);
-    toastTimeoutRef.current = setTimeout(() => setShowToast(null), 4000);
+    setShowToast({ msg, type });
+    toastTimeoutRef.current = setTimeout(() => setShowToast(null), 5000);
   };
 
   // Request fullscreen mode helper
@@ -181,10 +261,24 @@ const ExamSession: React.FC = () => {
           setExam(data.exam);
           setAttemptId(data.attemptId);
           setRemainingChances(data.remainingChances);
-          setTimeLeft(data.exam.durationMinutes * 60);
-          const init: Record<string, string | null> = {};
-          data.exam.questions.forEach((q: Question) => { init[q.id] = null; });
-          setAnswers(init);
+
+          // Try to restore a saved draft
+          const draft = loadDraft(data.exam.id);
+          if (draft) {
+            setAnswers(draft.answers);
+            setSubjectiveAnswers(draft.subjectiveAnswers);
+            // Restore time only if it's less than the full duration (i.e., they were mid-exam)
+            const fullTime = data.exam.durationMinutes * 60;
+            setTimeLeft(draft.timeLeft !== null && draft.timeLeft < fullTime ? draft.timeLeft : fullTime);
+            setDraftRestored(true);
+            setTimeout(() => setDraftRestored(false), 6000);
+          } else {
+            const init: Record<string, string | null> = {};
+            data.exam.questions.forEach((q: Question) => { init[q.id] = null; });
+            setAnswers(init);
+            setTimeLeft(data.exam.durationMinutes * 60);
+          }
+
           if (data.exam.questions.length > 0) {
             setViewedQuestions(new Set([data.exam.questions[0].id]));
           }
@@ -201,6 +295,8 @@ const ExamSession: React.FC = () => {
 
   async function handleAutoSubmit() {
     if (submitting || result || !exam) return;
+    // Silence violation detection for the entire auto-submit flow
+    isSubmittingRef.current = true;
     setSubmitting(true);
     try {
       const submissionAnswers = Object.keys(answers).map(qId => {
@@ -210,7 +306,7 @@ const ExamSession: React.FC = () => {
         }
         return { questionId: qId, optionId: answers[qId] };
       });
-      const res = await apiFetch(`/student/exams/${exam.id}/submit`, {
+      const res = await apiFetchWithRetry(`/student/exams/${exam.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ answers: submissionAnswers, isTerminated: true }),
@@ -220,12 +316,14 @@ const ExamSession: React.FC = () => {
       if (document.fullscreenElement || (document as any).webkitFullscreenElement || (document as any).msFullscreenElement) {
         if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
       }
+      clearDraft(exam.id);
       setResult({ score: data.score, totalPoints: data.totalPoints });
       setError('Your exam has been automatically submitted because the maximum number of integrity violations was exceeded.');
     } catch {
       setError('Network error during submission.');
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   }
 
@@ -248,7 +346,7 @@ const ExamSession: React.FC = () => {
         const data = await response.json();
         setRemainingChances(data.remainingChances);
         setLastViolationType(type);
-        
+
         if (data.remainingChances <= 0) {
           setShowWarningModal(false);
           await handleAutoSubmit();
@@ -269,6 +367,9 @@ const ExamSession: React.FC = () => {
       const isCurrentlyFullscreen = !!(document.fullscreenElement || (document as any).webkitFullscreenElement || (document as any).msFullscreenElement);
       setIsFullscreenActive(isCurrentlyFullscreen);
 
+      // Ignore fullscreen exit caused by our own submit/exit flow
+      if (isSubmittingRef.current) return;
+
       if (!isCurrentlyFullscreen && isFullscreenActive) {
         setIsPaused(true);
         reportViolation('FULLSCREEN_EXIT');
@@ -286,7 +387,7 @@ const ExamSession: React.FC = () => {
     };
   }, [exam, result, isFullscreenActive, remainingChances, attemptId]);
 
-  // Tab switch & Window focus listener
+  // Tab switch & Window focus listener (with debounce to avoid false positives)
   useEffect(() => {
     if (!exam || result || remainingChances <= 0 || !isFullscreenActive) return;
 
@@ -298,21 +399,28 @@ const ExamSession: React.FC = () => {
           reportViolation('TAB_SWITCH');
         }
       } else {
-        // Visible again — reset the flag
         windowViolationFiredRef.current = false;
       }
     };
 
     const handleBlur = () => {
-      if (!windowViolationFiredRef.current) {
-        windowViolationFiredRef.current = true;
-        setIsPaused(true);
-        reportViolation('WINDOW_BLUR');
-      }
+      // Ignore blur caused by our own submit flow
+      if (isSubmittingRef.current) return;
+      // Debounce: only flag a violation if focus is lost for > 800ms
+      // This prevents false positives from browser scrollbars, OS notifications, etc.
+      if (blurDebounceRef.current) clearTimeout(blurDebounceRef.current);
+      blurDebounceRef.current = setTimeout(() => {
+        if (!windowViolationFiredRef.current && !isSubmittingRef.current) {
+          windowViolationFiredRef.current = true;
+          setIsPaused(true);
+          reportViolation('WINDOW_BLUR');
+        }
+      }, 800);
     };
 
     const handleFocus = () => {
-      // Reset flag when user returns to window
+      // Cancel pending blur debounce — brief focus loss, no violation
+      if (blurDebounceRef.current) { clearTimeout(blurDebounceRef.current); blurDebounceRef.current = null; }
       windowViolationFiredRef.current = false;
     };
 
@@ -324,6 +432,7 @@ const ExamSession: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
+      if (blurDebounceRef.current) clearTimeout(blurDebounceRef.current);
     };
   }, [exam, result, isFullscreenActive, remainingChances, attemptId]);
 
@@ -440,6 +549,8 @@ const ExamSession: React.FC = () => {
 
   const handleSubmit = useCallback(async () => {
     if (submitting || result || !exam) return;
+    // Silence all violation detection for the duration of the submit flow
+    isSubmittingRef.current = true;
     setSubmitting(true);
     try {
       const submissionAnswers = Object.keys(answers).map(qId => {
@@ -449,7 +560,7 @@ const ExamSession: React.FC = () => {
         }
         return { questionId: qId, optionId: answers[qId] };
       });
-      const res = await apiFetch(`/student/exams/${exam.id}/submit`, {
+      const res = await apiFetchWithRetry(`/student/exams/${exam.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ answers: submissionAnswers }),
@@ -459,12 +570,18 @@ const ExamSession: React.FC = () => {
       if (document.fullscreenElement || (document as any).webkitFullscreenElement || (document as any).msFullscreenElement) {
         if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
       }
-      if (res.ok) setResult({ score: data.score, totalPoints: data.totalPoints });
-      else setError(data.message || 'Submission failed.');
+      if (res.ok) {
+        clearDraft(exam.id);
+        setResult({ score: data.score, totalPoints: data.totalPoints });
+      } else {
+        setError(data.message || 'Submission failed.');
+      }
     } catch {
-      setError('Network error during submission.');
+      setError('Network error during submission. Please check your connection and try again.');
     } finally {
       setSubmitting(false);
+      // Re-enable violation detection after submit completes
+      isSubmittingRef.current = false;
     }
   }, [answers, subjectiveAnswers, exam, result, submitting]);
 
@@ -511,6 +628,10 @@ const ExamSession: React.FC = () => {
     return               { background: 'var(--bg-color)',      border: '3px solid #ccc',               color: 'var(--text-muted)', fontWeight: 600 };
   };
 
+  // ── Timer urgency levels ─────────────────────────────────────────────────────
+  const timerCritical = timeLeft !== null && timeLeft < 120;   // < 2 min  → red pulsing
+  const timerWarning  = timeLeft !== null && timeLeft < 300;   // < 5 min  → orange
+
   // ── States ───────────────────────────────────────────────────────────────────
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-color)' }}>
@@ -535,13 +656,34 @@ const ExamSession: React.FC = () => {
   // ── Exam Paused Screen ──────────────────────────────────────────────────────
   if (exam && isPaused) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'rgba(0,0,0,0.85)', padding: 24, fontFamily: 'Outfit, sans-serif', zIndex: 10000, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-        <div className="neo-card" style={{ maxWidth: 500, width: '100%', textAlign: 'center', padding: '40px', background: '#fff' }}>
-          <AlertCircle size={48} style={{ color: 'var(--danger)', margin: '0 auto 20px' }} />
-          <h2 style={{ fontWeight: 900, marginBottom: 12, textTransform: 'uppercase' }}>Exam Paused</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: 28, lineHeight: 1.6 }}>
-            The exam has been paused because the window lost focus or you switched tabs. Click the button below to resume.
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'rgba(0,0,0,0.88)', padding: 24, fontFamily: 'Outfit, sans-serif', zIndex: 10000, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <div className="neo-card" style={{ maxWidth: 520, width: '100%', textAlign: 'center', padding: '44px 40px', background: '#fff' }}>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#ffe4e4', border: '3px solid var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <AlertCircle size={36} style={{ color: 'var(--danger)' }} />
+          </div>
+          <h2 style={{ fontWeight: 900, marginBottom: 10, textTransform: 'uppercase', fontSize: '1.6rem' }}>Exam Paused</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.65, fontSize: '0.95rem' }}>
+            The exam paused because the window lost focus or fullscreen was exited. Click below to resume.
           </p>
+
+          {/* Remaining chances indicator */}
+          <div style={{
+            display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 28,
+          }}>
+            {[1, 2, 3].map(i => (
+              <div key={i} style={{
+                width: 14, height: 14, borderRadius: '50%',
+                background: i <= remainingChances ? 'var(--accent-green)' : '#e5e7eb',
+                border: '2px solid var(--border-color)',
+                transition: 'background 0.3s',
+              }} />
+            ))}
+          </div>
+          <p style={{ fontSize: '0.8rem', fontWeight: 700, color: remainingChances <= 1 ? 'var(--danger)' : 'var(--text-muted)', marginBottom: 28 }}>
+            {remainingChances} of 3 chance{remainingChances !== 1 ? 's' : ''} remaining
+            {remainingChances === 1 ? ' — Next violation will auto-submit!' : ''}
+          </p>
+
           <button
             onClick={() => {
               setIsPaused(false);
@@ -550,7 +692,7 @@ const ExamSession: React.FC = () => {
               }
             }}
             className="neo-btn"
-            style={{ margin: '0 auto', fontSize: '1.05rem', padding: '12px 28px' }}
+            style={{ margin: '0 auto', fontSize: '1.05rem', padding: '13px 32px', width: '100%', justifyContent: 'center' }}
           >
             Resume Exam
           </button>
@@ -656,7 +798,7 @@ const ExamSession: React.FC = () => {
 
           {cameraStream ? (
             <button onClick={enterFullscreen} className="neo-btn" style={{ margin: '0 auto', fontSize: '1.05rem', padding: '12px 28px', width: '100%', justifyContent: 'center' }}>
-              Accept Requirements & Start Exam
+              Accept Requirements &amp; Start Exam
             </button>
           ) : (
             <button disabled className="neo-btn" style={{ margin: '0 auto', fontSize: '1.05rem', padding: '12px 28px', width: '100%', justifyContent: 'center', opacity: 0.5, cursor: 'not-allowed' }}>
@@ -869,6 +1011,8 @@ const ExamSession: React.FC = () => {
     if (_q.type === 'SUBJECTIVE') return (subjectiveAnswers[_q.id] || '').trim().length > 0;
     return answers[_q.id] !== null;
   }).length;
+  const unanswered = exam.questions.length - attempted;
+  const progressPct = Math.round((attempted / exam.questions.length) * 100);
 
   return (
     <div style={{
@@ -878,12 +1022,22 @@ const ExamSession: React.FC = () => {
       fontFamily: 'Outfit, sans-serif',
     }}>
 
+      {/* ══ PROGRESS BAR ════════════════════════════════════════════════════════ */}
+      <div style={{ height: 4, background: '#e5e7eb', flexShrink: 0, position: 'relative' }}>
+        <div style={{
+          height: '100%',
+          width: `${progressPct}%`,
+          background: progressPct === 100 ? 'var(--accent-green)' : 'var(--primary)',
+          transition: 'width 0.4s ease',
+        }} />
+      </div>
+
       {/* ══ STICKY TOP HEADER ══════════════════════════════════════════════════ */}
       <header style={{
         background: '#ffffff',
         borderBottom: 'var(--border-width) solid var(--border-color)',
         padding: '0 32px',
-        height: 68,
+        height: 64,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -895,22 +1049,39 @@ const ExamSession: React.FC = () => {
           {exam.title}
         </div>
 
-        {/* Right: timer + submit */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+        {/* Right: offline indicator + timer + submit */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+
+          {/* Offline badge */}
+          {!isOnline && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: '#fef3c7', border: '2px solid #f59e0b',
+              borderRadius: 'var(--border-radius)',
+              padding: '5px 12px',
+              fontSize: '0.78rem', fontWeight: 800, color: '#92400e',
+            }}>
+              <WifiOff size={14} /> Offline — Answers saved locally
+            </div>
+          )}
+
+          {/* Timer */}
           {timeLeft !== null && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '8px 16px',
-              border: 'var(--border-width) solid var(--border-color)',
+              border: `2px solid ${timerCritical ? '#dc2626' : timerWarning ? '#ea580c' : 'var(--border-color)'}`,
               borderRadius: 'var(--border-radius)',
-              background: timeLeft < 300 ? 'var(--danger)' : 'var(--primary)',
-              color: timeLeft < 300 ? '#fff' : 'var(--text-color)',
+              background: timerCritical ? '#dc2626' : timerWarning ? '#fff7ed' : 'var(--primary)',
+              color: timerCritical ? '#fff' : timerWarning ? '#ea580c' : 'var(--text-color)',
               fontWeight: 900, fontSize: '1.1rem',
               boxShadow: 'var(--box-shadow-sm)',
               fontVariantNumeric: 'tabular-nums',
+              animation: timerCritical ? 'pulse 1s ease-in-out infinite' : 'none',
             }}>
               <Clock size={18} />
               {fmt(timeLeft)}
+              {timerWarning && !timerCritical && <span style={{ fontSize: '0.7rem', fontWeight: 700, marginLeft: 2 }}>LOW</span>}
             </div>
           )}
 
@@ -925,6 +1096,18 @@ const ExamSession: React.FC = () => {
         </div>
       </header>
 
+      {/* Draft restored banner */}
+      {draftRestored && (
+        <div style={{
+          background: '#ecfdf5', borderBottom: '2px solid #10b981',
+          padding: '8px 32px', fontSize: '0.82rem', fontWeight: 800,
+          color: '#065f46', display: 'flex', alignItems: 'center', gap: 8,
+          flexShrink: 0,
+        }}>
+          <Wifi size={14} />
+          Your previous answers have been restored from a local draft. Continue where you left off.
+        </div>
+      )}
 
       {/* ══ TWO-COLUMN CONTENT AREA ════════════════════════════════════════════ */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
@@ -958,13 +1141,15 @@ const ExamSession: React.FC = () => {
                 >
                   {isMarkedQ ? '★ Marked' : '☆ Mark for Review'}
                 </button>
-                <button
-                  onClick={() => clearSelection(q.id)}
-                  className="neo-btn"
-                  style={{ padding: '7px 16px', fontSize: '0.85rem', background: '#e8e8e8', boxShadow: 'none' }}
-                >
-                  Clear Selection
-                </button>
+                {!isSubjective && (
+                  <button
+                    onClick={() => clearSelection(q.id)}
+                    className="neo-btn"
+                    style={{ padding: '7px 16px', fontSize: '0.85rem', background: '#e8e8e8', boxShadow: 'none' }}
+                  >
+                    Clear Selection
+                  </button>
+                )}
               </div>
             </div>
 
@@ -998,7 +1183,7 @@ const ExamSession: React.FC = () => {
                   fontWeight: 700,
                   color: '#666',
                 }}>
-                  ✍️ Write your answer in the text area below. Your response will be auto-graded by keyword matching.
+                  ✍️ Write your answer in the text area below. Your response will be reviewed by the instructor.
                 </div>
                 <textarea
                   value={subjAnswer}
@@ -1044,7 +1229,13 @@ const ExamSession: React.FC = () => {
                   return (
                     <div
                       key={opt.id}
-                      onClick={() => selectOption(q.id, opt.id)}
+                      onClick={() => {
+                        selectOption(q.id, opt.id);
+                        // Auto-advance to next question after a brief visual confirmation delay
+                        if (!isSel && !isLast) {
+                          setTimeout(() => goTo(currentIndex + 1), 350);
+                        }
+                      }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1083,6 +1274,11 @@ const ExamSession: React.FC = () => {
                           </div>
                         )}
                       </div>
+
+                      {/* Checkmark on selected */}
+                      {isSel && (
+                        <CheckCircle size={20} style={{ color: 'var(--text-color)', flexShrink: 0 }} />
+                      )}
                     </div>
                   );
                 })}
@@ -1108,31 +1304,51 @@ const ExamSession: React.FC = () => {
             <h3 style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.85rem', letterSpacing: '0.08em', marginBottom: 6, color: 'var(--text-color)' }}>
               Question Palette
             </h3>
-            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-              {attempted} of {exam.questions.length} answered
+            {/* Progress bar in sidebar */}
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>
+                <span>{attempted} answered</span>
+                <span>{unanswered} remaining</span>
+              </div>
+              <div style={{ height: 6, background: '#e5e7eb', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 99,
+                  width: `${progressPct}%`,
+                  background: progressPct === 100 ? 'var(--accent-green)' : 'var(--primary)',
+                  transition: 'width 0.4s ease',
+                }} />
+              </div>
+            </div>
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: progressPct === 100 ? '#065f46' : 'var(--text-muted)' }}>
+              {progressPct === 100 ? '✓ All questions answered!' : `${progressPct}% complete`}
             </div>
           </div>
 
           {/* Integrity Status Chances indicator */}
           <div style={{ borderTop: '2px solid #f0f0f0', paddingTop: 20 }}>
-            <h3 style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.85rem', letterSpacing: '0.08em', marginBottom: 6, color: 'var(--text-color)' }}>
+            <h3 style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.85rem', letterSpacing: '0.08em', marginBottom: 10, color: 'var(--text-color)' }}>
               Integrity Status
             </h3>
-            <div style={{
-              fontSize: '0.8rem',
-              fontWeight: 800,
-              color: remainingChances === 1 ? 'var(--danger)' : 'var(--text-muted)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6
-            }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{
+                  width: 12, height: 12, borderRadius: '50%',
+                  background: i <= remainingChances ? 'var(--accent-green)' : '#e5e7eb',
+                  border: '2px solid var(--border-color)',
+                }} />
+              ))}
               <span style={{
-                width: 8, height: 8, borderRadius: '50%',
-                background: remainingChances === 1 ? 'var(--danger)' : 'var(--accent-green)',
-                display: 'inline-block'
-              }} />
-              Remaining Chances: {remainingChances} / 3
+                fontSize: '0.78rem', fontWeight: 800,
+                color: remainingChances <= 1 ? 'var(--danger)' : 'var(--text-muted)',
+              }}>
+                {remainingChances} / 3
+              </span>
             </div>
+            {remainingChances <= 1 && (
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--danger)', lineHeight: 1.4 }}>
+                ⚠ Last chance! Next violation will auto-submit your exam.
+              </div>
+            )}
           </div>
 
           {/* Question Grid Pills */}
@@ -1212,19 +1428,31 @@ const ExamSession: React.FC = () => {
               Security Warning
             </h2>
             <p style={{ fontWeight: 700, marginBottom: 16, color: 'var(--text-color)' }}>
-              Warning: You triggered an integrity violation ({lastViolationType.replace('_', ' ')}).
+              You triggered an integrity violation ({lastViolationType.replace(/_/g, ' ')}).
             </p>
+            {/* Dot indicators */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 10 }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{
+                  width: 16, height: 16, borderRadius: '50%',
+                  background: i <= remainingChances ? 'var(--accent-green)' : 'var(--danger)',
+                  border: '2px solid var(--border-color)',
+                }} />
+              ))}
+            </div>
             <div style={{
-              background: 'var(--danger)',
-              color: '#fff',
+              background: remainingChances === 1 ? 'var(--danger)' : '#fff7ed',
+              color: remainingChances === 1 ? '#fff' : '#92400e',
               padding: '12px',
               borderRadius: 'var(--border-radius)',
               fontWeight: 900,
-              fontSize: '1.1rem',
+              fontSize: '1rem',
               marginBottom: 24,
-              border: '2px solid var(--border-color)',
+              border: `2px solid ${remainingChances === 1 ? 'var(--danger)' : '#f59e0b'}`,
             }}>
-              Remaining chances: {remainingChances} / 3
+              {remainingChances === 1
+                ? '⚠ Last chance! One more violation will auto-submit your exam.'
+                : `Remaining chances: ${remainingChances} / 3`}
             </div>
             <button
               onClick={() => {
@@ -1249,17 +1477,20 @@ const ExamSession: React.FC = () => {
           bottom: 24,
           left: '50%',
           transform: 'translateX(-50%)',
-          background: '#ffe0e0',
-          color: 'var(--danger)',
+          background: showToast.type === 'error' ? '#fef3c7' : showToast.type === 'info' ? '#ecfdf5' : '#ffe0e0',
+          color: showToast.type === 'error' ? '#92400e' : showToast.type === 'info' ? '#065f46' : 'var(--danger)',
           padding: '12px 24px',
           borderRadius: 'var(--border-radius)',
           boxShadow: 'var(--box-shadow-lg)',
           fontWeight: 800,
           zIndex: 10000,
           fontFamily: 'Outfit, sans-serif',
-          border: '2px solid var(--danger)',
+          border: `2px solid ${showToast.type === 'error' ? '#f59e0b' : showToast.type === 'info' ? '#10b981' : 'var(--danger)'}`,
+          maxWidth: 480,
+          textAlign: 'center',
+          fontSize: '0.88rem',
         }}>
-          {showToast}
+          {showToast.msg}
         </div>
       )}
 
@@ -1271,15 +1502,46 @@ const ExamSession: React.FC = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: 'Outfit, sans-serif',
         }}>
-          <div className="neo-card" style={{ maxWidth: 440, width: '90%', textAlign: 'center', padding: '40px 36px' }}>
-            <CheckCircle size={48} style={{ color: 'var(--primary)', margin: '0 auto 20px', display: 'block' }} />
+          <div className="neo-card" style={{ maxWidth: 460, width: '90%', textAlign: 'center', padding: '40px 36px' }}>
+            <CheckCircle size={48} style={{ color: unanswered > 0 ? '#ea580c' : 'var(--accent-green)', margin: '0 auto 20px', display: 'block' }} />
             <h2 style={{ fontWeight: 900, fontSize: '1.4rem', textTransform: 'uppercase', marginBottom: 12 }}>
               Submit Quiz?
             </h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.6 }}>
-              You have answered <strong>{Object.values(answers).filter(v => v !== null).length}</strong> out of <strong>{exam.questions.length}</strong> questions.
-            </p>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 32, lineHeight: 1.6 }}>
+
+            {/* Answered / Unanswered stats */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+              <div style={{
+                flex: 1, padding: '14px 10px', borderRadius: 'var(--border-radius)',
+                background: 'var(--accent-green)', border: '2px solid var(--border-color)',
+                fontWeight: 900,
+              }}>
+                <div style={{ fontSize: '1.6rem' }}>{attempted}</div>
+                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Answered</div>
+              </div>
+              <div style={{
+                flex: 1, padding: '14px 10px', borderRadius: 'var(--border-radius)',
+                background: unanswered > 0 ? '#ffe4e4' : '#f0fdf4',
+                border: `2px solid ${unanswered > 0 ? 'var(--danger)' : '#bbf7d0'}`,
+                fontWeight: 900,
+                color: unanswered > 0 ? 'var(--danger)' : '#065f46',
+              }}>
+                <div style={{ fontSize: '1.6rem' }}>{unanswered}</div>
+                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Unanswered</div>
+              </div>
+            </div>
+
+            {unanswered > 0 && (
+              <div style={{
+                background: '#fff7ed', border: '2px solid #f59e0b',
+                borderRadius: 'var(--border-radius)', padding: '10px 14px',
+                fontSize: '0.82rem', fontWeight: 700, color: '#92400e',
+                marginBottom: 16, textAlign: 'left',
+              }}>
+                ⚠ You have {unanswered} unanswered question{unanswered > 1 ? 's' : ''}. Unanswered questions score 0 points.
+              </div>
+            )}
+
+            <p style={{ color: 'var(--text-muted)', marginBottom: 28, lineHeight: 1.6, fontSize: '0.9rem' }}>
               You <strong>cannot</strong> change your answers after submitting.
             </p>
             <div style={{ display: 'flex', gap: 12 }}>
@@ -1353,6 +1615,14 @@ const ExamSession: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ── Pulse animation for critical timer ── */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.85; transform: scale(1.03); }
+        }
+      `}</style>
 
     </div>
   );
