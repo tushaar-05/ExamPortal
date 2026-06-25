@@ -470,19 +470,30 @@ export const getExamSubmissions = async (req: AuthenticatedRequest, res: Respons
       return res.status(404).json({ message: 'Exam not found' });
     }
 
-    const submissions = await prisma.examSubmission.findMany({
+    // Fetch submissions WITHOUT include: { user } to avoid crashing when a student
+    // account has been deleted (orphan submission). We use the denormalised
+    // userName / userEmail fields that were written at submit-time instead.
+    const rawSubmissions = await prisma.examSubmission.findMany({
       where: { examId: id },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          }
-        }
-      },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Optionally enrich from the live User table for students who still exist
+    const userIds = [...new Set(rawSubmissions.map(s => s.userId))];
+    const liveUsers = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, email: true },
+    });
+    const userMap = new Map(liveUsers.map(u => [u.id, u]));
+
+    const submissions = rawSubmissions.map(s => ({
+      ...s,
+      user: userMap.get(s.userId) ?? {
+        id:    s.userId,
+        name:  s.userName  ?? 'Deleted User',
+        email: s.userEmail ?? 'unknown',
+      },
+    }));
 
     return res.status(200).json({ submissions });
   } catch (err) {
@@ -490,6 +501,7 @@ export const getExamSubmissions = async (req: AuthenticatedRequest, res: Respons
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 // ─── Grade Subjective Exam Submission ─────────────────────────────────────────
 export const gradeSubmission = async (req: AuthenticatedRequest, res: Response) => {
