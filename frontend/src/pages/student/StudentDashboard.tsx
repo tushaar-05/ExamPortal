@@ -176,10 +176,9 @@ const StudentDashboard: React.FC = () => {
                 const isScheduled = exam.status === 'SCHEDULED';
                 const isExpired = exam.status === 'EXPIRED';
 
-                const isMCQ = exam.type !== 'SUBJECTIVE';
                 const hasEndTime = !!exam.endTime;
                 const isBeforeDeadline = hasEndTime && new Date() < new Date(exam.endTime!);
-                const isReviewBlocked = isMCQ && isBeforeDeadline;
+                const isReviewBlocked = isBeforeDeadline;
 
                 // Badge color
                 const badgeStyle: React.CSSProperties = {

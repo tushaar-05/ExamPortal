@@ -11,6 +11,7 @@ interface ExamDetail {
   totalPoints: number;
   score: number | null;
   graded?: boolean;
+  scoreHidden?: boolean;
   status: 'AVAILABLE' | 'COMPLETED' | 'TERMINATED' | 'SCHEDULED' | 'EXPIRED';
   dateTaken: string | null;
 }
@@ -438,7 +439,9 @@ const StudentScores: React.FC = () => {
                                           )}
                                         </td>
                                         <td style={{ padding: '14px 16px', fontWeight: 800 }}>
-                                          {exam.score !== null ? (
+                                          {exam.scoreHidden ? (
+                                            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Score hidden until deadline</span>
+                                          ) : exam.score !== null ? (
                                             exam.graded === false ? (
                                               <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Pending Grading</span>
                                             ) : (

@@ -524,8 +524,20 @@ export const gradeSubmission = async (req: AuthenticatedRequest, res: Response) 
       const question = submission.exam.questions.find(q => q.id === originalAns.questionId);
       const maxPoints = question ? question.points : 0;
       
-      const pointsEarned = gradeInfo ? Math.min(maxPoints, Math.max(0, Number(gradeInfo.pointsEarned || 0))) : (originalAns.pointsEarned ?? 0);
-      const feedback = gradeInfo ? (gradeInfo.feedback || null) : (originalAns.feedback || null);
+      // For MCQ questions: always auto-calculate from the correct answer (never trust the payload)
+      // For SUBJECTIVE questions: use the admin-provided grade from the payload
+      let pointsEarned: number;
+      if (question && (question as any).type !== 'SUBJECTIVE') {
+        // MCQ: correct = full points, wrong = 0
+        const correctOptionId = (question as any).correctOptionId;
+        pointsEarned = (originalAns as any).optionId === correctOptionId ? maxPoints : 0;
+      } else {
+        // Subjective: use admin-assigned grade, fall back to previously stored value
+        pointsEarned = gradeInfo
+          ? Math.min(maxPoints, Math.max(0, Number(gradeInfo.pointsEarned || 0)))
+          : ((originalAns as any).pointsEarned ?? 0);
+      }
+      const feedback = gradeInfo ? (gradeInfo.feedback || null) : ((originalAns as any).feedback || null);
       newScore += pointsEarned;
 
       return {

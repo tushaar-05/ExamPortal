@@ -204,7 +204,18 @@ const Exams: React.FC = () => {
     const scores: Record<string, number> = {};
     const feedbacks: Record<string, string> = {};
     submission.answers.forEach((ans: any) => {
-      scores[ans.questionId] = ans.pointsEarned ?? 0;
+      // For MCQ answers where pointsEarned was never set (null), calculate from correctOptionId
+      if (ans.pointsEarned !== null && ans.pointsEarned !== undefined) {
+        scores[ans.questionId] = ans.pointsEarned;
+      } else {
+        const question = activeExam?.questions?.find((q: any) => q.id === ans.questionId);
+        if (question && question.type !== 'SUBJECTIVE') {
+          // Auto-calculate MCQ score
+          scores[ans.questionId] = ans.optionId === question.correctOptionId ? question.points : 0;
+        } else {
+          scores[ans.questionId] = 0;
+        }
+      }
       feedbacks[ans.questionId] = ans.feedback || '';
     });
     setGradingScores(scores);
@@ -1287,6 +1298,9 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                     {submissions.map((sub) => {
                       const isGraded = sub.graded !== false;
                       const formattedDate = new Date(sub.createdAt).toLocaleString();
+                      // A mixed exam (MCQ type but with subjective questions) also needs manual grading
+                      const hasSubjectiveQuestions = activeExam.questions?.some((q: any) => q.type === 'SUBJECTIVE');
+                      const needsManualGrading = hasSubjectiveQuestions;
                       
                       return (
                         <tr key={sub.id} style={{ borderBottom: '2px solid var(--border-color)' }}>
@@ -1295,14 +1309,14 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>{sub.user?.email}</div>
                           </td>
                           <td style={{ padding: '16px 20px', fontWeight: 700 }}>
-                            {activeExam.type === 'SUBJECTIVE' && !isGraded ? (
+                            {needsManualGrading && !isGraded ? (
                               <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>—</span>
                             ) : (
                               <span>{sub.score} / {sub.totalPoints} pts</span>
                             )}
                           </td>
                           <td style={{ padding: '16px 20px' }}>
-                            {activeExam.type === 'SUBJECTIVE' ? (
+                            {needsManualGrading ? (
                               isGraded ? (
                                 <span className="neo-badge" style={{ backgroundColor: 'var(--accent-green)', color: 'var(--text-color)' }}>Graded</span>
                               ) : (
@@ -1318,10 +1332,10 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                           <td style={{ padding: '12px 20px', textAlign: 'center' }}>
                             <button
                               onClick={() => handleOpenGradingModal(sub)}
-                              className={`neo-btn ${activeExam.type === 'SUBJECTIVE' && !isGraded ? '' : 'neo-btn-secondary'}`}
+                              className={`neo-btn ${needsManualGrading && !isGraded ? '' : 'neo-btn-secondary'}`}
                               style={{ padding: '6px 12px', fontSize: '0.8rem', transform: 'none' }}
                             >
-                              {activeExam.type === 'SUBJECTIVE' ? (isGraded ? 'Revisit / Regrade' : 'Review & Grade') : 'Review Answers'}
+                              {needsManualGrading ? (isGraded ? 'Revisit / Regrade' : 'Review & Grade') : 'Review Answers'}
                             </button>
                           </td>
                         </tr>
@@ -1964,7 +1978,7 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
             </button>
 
             <h2 style={{ textTransform: 'uppercase', fontWeight: 900, marginBottom: '8px', fontSize: '1.4rem' }}>
-              {activeExam?.type === 'SUBJECTIVE' ? 'Grade Student Answers' : 'Review Student Answers'}
+              {activeExam?.questions?.some((q: any) => q.type === 'SUBJECTIVE') ? 'Grade Student Answers' : 'Review Student Answers'}
             </h2>
             <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '0.9rem' }}>
               Student: <span style={{ fontWeight: 800, color: 'var(--text-color)' }}>{activeSubmission.user?.name}</span> ({activeSubmission.user?.email})
@@ -2038,8 +2052,8 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                         </div>
                       )}
 
-                      {/* Grading Input (only if Subjective Exam) */}
-                      {activeExam?.type === 'SUBJECTIVE' ? (
+                      {/* Grading Input: editable for SUBJECTIVE questions, read-only auto-grade for MCQ questions */}
+                      {q.type === 'SUBJECTIVE' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                           <div>
                             <label style={{ display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px', fontSize: '0.75rem' }}>
@@ -2090,7 +2104,7 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                 })}
               </div>
 
-              {activeExam?.type === 'SUBJECTIVE' && (
+              {activeExam?.questions?.some((q: any) => q.type === 'SUBJECTIVE') && (
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
                   <button
                     type="button"

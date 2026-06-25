@@ -46,7 +46,8 @@ export const getStudentExams = async (req: AuthenticatedRequest, res: Response) 
         status = 'EXPIRED';
       }
       
-      const isReviewBlocked = exam.type !== 'SUBJECTIVE' && exam.endTime && now < new Date(exam.endTime);
+      const hasEndTime = !!exam.endTime;
+      const isBeforeDeadline = hasEndTime && now < new Date(exam.endTime);
 
       return {
         id: exam.id,
@@ -59,9 +60,13 @@ export const getStudentExams = async (req: AuthenticatedRequest, res: Response) 
         status,
         type: exam.type,
         score: submission ? (
-          exam.type === 'SUBJECTIVE' && submission.graded === false
-            ? "Pending Grading"
-            : `${submission.score} / ${submission.totalPoints}`
+          isBeforeDeadline ? (
+            undefined
+          ) : (
+            exam.questions.some((q: any) => q.type === 'SUBJECTIVE') && submission.graded === false
+              ? "Pending Grading"
+              : `${submission.score} / ${submission.totalPoints}`
+          )
         ) : undefined
       };
     });
@@ -277,7 +282,7 @@ export const submitExam = async (req: AuthenticatedRequest, res: Response) => {
           subjectiveAnswer: ans.subjectiveAnswer || null,
           pointsEarned: null,
         })),
-        graded: exam.type === 'SUBJECTIVE' ? false : true,
+        graded: exam.questions.some((q: any) => q.type === 'SUBJECTIVE') ? false : true,
       }
     });
 
@@ -300,9 +305,12 @@ export const submitExam = async (req: AuthenticatedRequest, res: Response) => {
       data: { score: `${averagePercentage}%` }
     });
 
+    const hasEndTime = !!exam.endTime;
+    const isBeforeDeadline = hasEndTime && new Date() < new Date(exam.endTime);
+
     return res.status(200).json({ 
       message: 'Exam submitted successfully',
-      score: submission.score,
+      score: isBeforeDeadline ? null : submission.score,
       totalPoints: submission.totalPoints
     });
 
@@ -360,10 +368,15 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
       // Calculate total potential and total achieved scores
       let totalMaxPoints = 0;
       let totalAchievedPoints = 0;
+      const now = new Date();
       
       subjectSubmissions.forEach(sub => {
-        totalMaxPoints += sub.totalPoints;
-        totalAchievedPoints += sub.score;
+        const exam = subjectExams.find(e => e.id === sub.examId);
+        const isBeforeDeadline = exam && exam.endTime && now < new Date(exam.endTime);
+        if (!isBeforeDeadline) {
+          totalMaxPoints += sub.totalPoints;
+          totalAchievedPoints += sub.score;
+        }
       });
 
       const averagePercentage = totalMaxPoints > 0 
@@ -390,12 +403,16 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           }
         }
 
+        const nowTime = new Date();
+        const isBeforeDeadline = exam.endTime && nowTime < new Date(exam.endTime);
+
         return {
           id: exam.id,
           title: exam.title,
           totalPoints: exam.totalPoints,
-          score: sub ? sub.score : null,
+          score: sub ? (isBeforeDeadline ? null : sub.score) : null,
           graded: sub ? (sub.graded !== false) : true,
+          scoreHidden: !!(sub && isBeforeDeadline),
           status,
           dateTaken: sub ? sub.createdAt : null,
         };
@@ -421,9 +438,14 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
 
       let totalMaxPoints = 0;
       let totalAchievedPoints = 0;
+      const now = new Date();
       otherSubmissions.forEach(sub => {
-        totalMaxPoints += sub.totalPoints;
-        totalAchievedPoints += sub.score;
+        const exam = otherExams.find(e => e.id === sub.examId);
+        const isBeforeDeadline = exam && exam.endTime && now < new Date(exam.endTime);
+        if (!isBeforeDeadline) {
+          totalMaxPoints += sub.totalPoints;
+          totalAchievedPoints += sub.score;
+        }
       });
 
       const averagePercentage = totalMaxPoints > 0 
@@ -448,12 +470,16 @@ export const getStudentScores = async (req: AuthenticatedRequest, res: Response)
           }
         }
 
+        const nowTime = new Date();
+        const isBeforeDeadline = exam.endTime && nowTime < new Date(exam.endTime);
+
         return {
           id: exam.id,
           title: exam.title,
           totalPoints: exam.totalPoints,
-          score: sub ? sub.score : null,
+          score: sub ? (isBeforeDeadline ? null : sub.score) : null,
           graded: sub ? (sub.graded !== false) : true,
+          scoreHidden: !!(sub && isBeforeDeadline),
           status,
           dateTaken: sub ? sub.createdAt : null,
         };
@@ -506,8 +532,8 @@ export const getSubmissionReview = async (req: AuthenticatedRequest, res: Respon
       return res.status(404).json({ message: 'Exam not found' });
     }
 
-    // Block review for MCQ exams if they are accessed before the deadline (endTime)
-    if (exam.type !== 'SUBJECTIVE' && exam.endTime && new Date() < new Date(exam.endTime)) {
+    // Block review for all exams if they are accessed before the deadline (endTime)
+    if (exam.endTime && new Date() < new Date(exam.endTime)) {
       return res.status(403).json({
         message: `Review is not allowed until after the exam deadline: ${new Date(exam.endTime).toLocaleString()}`
       });

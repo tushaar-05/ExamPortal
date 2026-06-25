@@ -839,8 +839,9 @@ const ExamSession: React.FC = () => {
 
   // ── Result screen ────────────────────────────────────────────────────────────
   if (result) {
-    const pct = Math.round((result.score / result.totalPoints) * 100);
-    const passed = pct >= 60;
+    const isScoreHidden = result.score === null;
+    const pct = isScoreHidden ? 0 : Math.round((result.score! / result.totalPoints) * 100);
+    const passed = isScoreHidden ? true : pct >= 60;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-color)', fontFamily: 'Outfit, sans-serif' }}>
@@ -890,21 +891,40 @@ const ExamSession: React.FC = () => {
             <h2 style={{ fontWeight: 900, fontSize: '1.8rem', textTransform: 'uppercase', marginBottom: 8 }}>
               Assessment Complete!
             </h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 36 }}>Your responses have been graded automatically.</p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 36 }}>
+              {isScoreHidden 
+                ? 'Your responses have been recorded successfully.' 
+                : 'Your responses have been graded automatically.'}
+            </p>
 
-            <div className="neo-card" style={{
-              background: 'var(--primary)', marginBottom: 32,
-              boxShadow: 'var(--box-shadow-lg)',
-            }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>
-                Final Score
+            {!isScoreHidden ? (
+              <div className="neo-card" style={{
+                background: 'var(--primary)', marginBottom: 32,
+                boxShadow: 'var(--box-shadow-lg)',
+              }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>
+                  Final Score
+                </div>
+                <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: 1.1 }}>
+                  {result.score}
+                  <span style={{ fontSize: '1.4rem', color: 'var(--text-muted)', fontWeight: 600 }}> / {result.totalPoints}</span>
+                </div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 900, marginTop: 8 }}>{pct}%</div>
               </div>
-              <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: 1.1 }}>
-                {result.score}
-                <span style={{ fontSize: '1.4rem', color: 'var(--text-muted)', fontWeight: 600 }}> / {result.totalPoints}</span>
+            ) : (
+              <div className="neo-card" style={{
+                background: 'var(--bg-color)', marginBottom: 32,
+                border: '2px dashed var(--border-color)',
+                padding: '24px'
+              }}>
+                <p style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0, color: 'var(--text-color)' }}>
+                  Thank you for submitting!
+                </p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: 8, marginBottom: 0 }}>
+                  Scores and correct answers will be released after the exam deadline has passed.
+                </p>
               </div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 900, marginTop: 8 }}>{pct}%</div>
-            </div>
+            )}
 
             {/* ── Feedback Section ── */}
             <div style={{
