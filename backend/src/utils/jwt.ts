@@ -15,11 +15,11 @@ export interface TokenPayload {
 }
 
 export const generateAccessToken = (userId: string, role: string): string => {
-  return jwt.sign({ userId, role }, getRequiredEnv('JWT_SECRET'), { expiresIn: '15m' });
+  return jwt.sign({ userId, role }, getRequiredEnv('JWT_SECRET'), { expiresIn: '1d' });
 };
 
 export const generateRefreshToken = (userId: string, role: string): string => {
-  return jwt.sign({ userId, role }, getRequiredEnv('JWT_REFRESH_SECRET'), { expiresIn: '7d' });
+  return jwt.sign({ userId, role }, getRequiredEnv('JWT_REFRESH_SECRET'), { expiresIn: '365d' });
 };
 
 export const verifyAccessToken = (token: string): TokenPayload => {
@@ -37,20 +37,20 @@ export const sendTokenCookies = (res: Response, userId: string, role: string) =>
   const isProduction = process.env.NODE_ENV === 'production';
   const sameSite = isProduction ? 'none' : 'lax';
 
-  // Access token cookie (expires in 15 mins)
+  // Access token cookie (expires in 1 day)
   res.cookie('accessToken', accessToken, {
     httpOnly: true,
     secure: isProduction,
     sameSite,
-    maxAge: 15 * 60 * 1000, // 15 mins in ms
+    maxAge: 24 * 60 * 60 * 1000, // 1 day in ms
   });
 
-  // Refresh token cookie (expires in 7 days)
+  // Refresh token cookie (expires in 365 days)
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: isProduction,
     sameSite,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+    maxAge: 365 * 24 * 60 * 60 * 1000, // 365 days in ms
   });
 
   return { accessToken, refreshToken };
