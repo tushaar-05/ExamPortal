@@ -115,6 +115,16 @@ const ExamReview: React.FC = () => {
   const stats = data ? (() => {
     let correct = 0, incorrect = 0, skipped = 0;
     data.questions.forEach(q => {
+      if (q.type === 'SUBJECTIVE') {
+        const hasAnswer = (q.subjectiveAnswer || '').trim().length > 0;
+        if (!hasAnswer) { skipped++; return; }
+        // Only count graded subjective questions in correct/incorrect
+        if (q.pointsEarned != null) {
+          if (q.pointsEarned === q.points) correct++;
+          else incorrect++;
+        }
+        return;
+      }
       if (!q.selectedOptionId) { skipped++; return; }
       if (q.selectedOptionId === q.correctOptionId) correct++;
       else incorrect++;
@@ -365,16 +375,42 @@ const ExamReview: React.FC = () => {
             {/* ── Question Cards ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               {data.questions.map((q, idx) => {
-                const isCorrect = q.selectedOptionId === q.correctOptionId;
-                const isSkipped = !q.selectedOptionId;
+                const isSubjective = q.type === 'SUBJECTIVE';
+
+                // Skipped: no option selected (MCQ) or no text written (Subjective)
+                const isSkipped = isSubjective
+                  ? !(q.subjectiveAnswer || '').trim()
+                  : !q.selectedOptionId;
+
+                // Pending: subjective question that has an answer but hasn't been graded yet
+                const isPending = isSubjective && !isSkipped && q.pointsEarned == null;
+
+                // Correct: MCQ exact match, or Subjective full points
+                const isCorrect = isSubjective
+                  ? (q.pointsEarned != null && q.pointsEarned === q.points)
+                  : q.selectedOptionId === q.correctOptionId;
+
+                // Partially correct: Subjective, graded, got some but not full points
+                const isPartiallyCorrect = isSubjective
+                  && q.pointsEarned != null
+                  && q.pointsEarned > 0
+                  && q.pointsEarned < q.points;
 
                 // Header color
-                const headerBg = isSkipped
+                const headerBg = isSkipped || isPending
                   ? '#f3f4f6'
                   : isCorrect
                     ? '#d1fae5'
-                    : '#fee2e2';
-                const headerBorder = isSkipped ? '#9ca3af' : isCorrect ? '#059669' : '#dc2626';
+                    : isPartiallyCorrect
+                      ? '#fffbeb'
+                      : '#fee2e2';
+                const headerBorder = isSkipped || isPending
+                  ? '#9ca3af'
+                  : isCorrect
+                    ? '#059669'
+                    : isPartiallyCorrect
+                      ? '#d97706'
+                      : '#dc2626';
 
                 return (
                   <div
@@ -425,9 +461,17 @@ const ExamReview: React.FC = () => {
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', fontWeight: 800, color: '#6b7280' }}>
                             <MinusCircle size={14} /> Skipped
                           </span>
+                        ) : isPending ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', fontWeight: 800, color: '#4b5563' }}>
+                            <MinusCircle size={14} /> Awaiting Grading
+                          </span>
                         ) : isCorrect ? (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', fontWeight: 800, color: '#059669' }}>
                             <CheckCircle size={14} /> Correct
+                          </span>
+                        ) : isPartiallyCorrect ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', fontWeight: 800, color: '#d97706' }}>
+                            <CheckCircle size={14} /> Partially Correct
                           </span>
                         ) : (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', fontWeight: 800, color: '#dc2626' }}>

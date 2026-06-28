@@ -545,11 +545,12 @@ export const getSubmissionReview = async (req: AuthenticatedRequest, res: Respon
       
       let pointsEarned = 0;
       if (studentAns) {
-        if (exam.type === 'SUBJECTIVE') {
-          pointsEarned = studentAns.pointsEarned ?? 0;
+        // If the submission has already been graded (pointsEarned is stored), always use that value.
+        // Only fall back to auto-calculation when pointsEarned has never been set (null).
+        if ((studentAns as any).pointsEarned !== null && (studentAns as any).pointsEarned !== undefined) {
+          pointsEarned = (studentAns as any).pointsEarned;
         } else if (q.type === 'SUBJECTIVE') {
           const studentAnsText = (studentAns.subjectiveAnswer || '').trim().toLowerCase();
-          const modelAns = (q.correctSubjectiveAnswer || '').trim().toLowerCase();
           const keywordsStr = q.correctAnswerKeywords || '';
           
           if (studentAnsText.length > 0) {
@@ -566,6 +567,7 @@ export const getSubmissionReview = async (req: AuthenticatedRequest, res: Respon
                 pointsEarned = q.points;
               }
             } else {
+              const modelAns = (q.correctSubjectiveAnswer || '').trim().toLowerCase();
               if (studentAnsText === modelAns) {
                 pointsEarned = q.points;
               } else if (studentAnsText.length >= 10) {
@@ -574,7 +576,7 @@ export const getSubmissionReview = async (req: AuthenticatedRequest, res: Respon
             }
           }
         } else {
-          // MCQ
+          // MCQ: auto-calculate from correct answer
           if (studentAns.optionId === q.correctOptionId) {
             pointsEarned = q.points;
           }
