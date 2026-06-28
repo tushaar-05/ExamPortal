@@ -652,31 +652,47 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
       select: { id: true, name: true, profilePic: true },
     });
 
-    // Fetch all submissions
+    // Fetch all submissions (only graded/submitted ones)
     const allSubmissions = await prisma.examSubmission.findMany({
       select: { userId: true, score: true, totalPoints: true, examId: true, createdAt: true },
     });
 
-    // Fetch all exams for subject mapping
+    // Fetch all published exams (use all exams; past-deadline ones count for completion)
     const allExams = await prisma.exam.findMany({
-      select: { id: true, subject: true, type: true, endTime: true },
+      select: { id: true, subject: true, endTime: true },
     });
+
+    const totalExamsInSystem = allExams.length;
     const examSubjectMap = new Map(allExams.map(e => [e.id, e.subject ?? 'Unassigned']));
 
     const SUBJECTS = ['Git and Github', 'AI fundamentals', 'Automation with N8N', 'AI tools and Productivity'];
 
-    const ranked = students.map(student => {
-      const subs = allSubmissions.filter(s => s.userId === student.id);
+    // ── Helper: population std-dev of an array of numbers ──────────────────────
+    const stdDev = (values: number[]): number => {
+      if (values.length === 0) return 0;
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const variance = values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / values.length;
+      return Math.sqrt(variance);
+    };
 
+    const entries = students.map(student => {
+      const subs = allSubmissions.filter(s => s.userId === student.id);
+      const inactive = subs.length === 0;
+
+      // ── Per-submission totals ────────────────────────────────────────────────
       let totalEarned = 0;
       let totalPossible = 0;
-
       const subjectScores: Record<string, { earned: number; possible: number }> = {};
       SUBJECTS.forEach(s => { subjectScores[s] = { earned: 0, possible: 0 }; });
+
+      const perExamPcts: number[] = [];
 
       subs.forEach(sub => {
         totalEarned   += sub.score;
         totalPossible += sub.totalPoints;
+        const pct = sub.totalPoints > 0 ? (sub.score / sub.totalPoints) * 100 : 0;
+        perExamPcts.push(pct);
+
         const subject = examSubjectMap.get(sub.examId) ?? 'Unassigned';
         if (subjectScores[subject]) {
           subjectScores[subject].earned   += sub.score;
@@ -684,23 +700,61 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
         }
       });
 
-      const overallPct = totalPossible > 0
-        ? Math.round((totalEarned / totalPossible) * 100)
+      // ── Avg % across completed exams (per-exam average, not ratio) ──────────
+      const avgPct = perExamPcts.length > 0
+        ? perExamPcts.reduce((a, b) => a + b, 0) / perExamPcts.length
         : 0;
 
+      // ── Completion rate (0–100): how many of all exams has this student done ─
+      const completionRate = totalExamsInSystem > 0
+        ? (subs.length / totalExamsInSystem) * 100
+        : 0;
+
+      // ── Consistency bonus (0–100): penalise high variance across subjects ────
+      // Only count subjects that were attempted
+      const attemptedSubjectPcts = SUBJECTS
+        .map(s => subjectScores[s])
+        .filter(s => s.possible > 0)
+        .map(s => (s.earned / s.possible) * 100);
+
+      let consistencyBonus = 0;
+      if (attemptedSubjectPcts.length > 0) {
+        const sd = stdDev(attemptedSubjectPcts);
+        // Full 100 pts when std-dev = 0 (perfectly consistent), 0 pts when sd >= 50
+        consistencyBonus = Math.max(0, 100 - sd * 2);
+      }
+
+      // ── Composite leaderboard score ─────────────────────────────────────────
+      const avgPctContribution         = 0.55 * avgPct;
+      const completionContribution      = 0.30 * completionRate;
+      const consistencyContribution     = 0.15 * consistencyBonus;
+      const leaderboardScore = inactive
+        ? 0
+        : Math.round((avgPctContribution + completionContribution + consistencyContribution) * 10) / 10;
+
+      // ── Last submission time (for tie-breaking) ─────────────────────────────
       const lastSubmissionTime = subs.length > 0
         ? Math.max(...subs.map(s => new Date(s.createdAt).getTime()))
         : Infinity;
 
       return {
-        id:           student.id,
-        name:         student.name,
-        profilePic:   student.profilePic ?? null,
+        id:             student.id,
+        name:           student.name,
+        profilePic:     student.profilePic ?? null,
         examsCompleted: subs.length,
+        totalExams:     totalExamsInSystem,
         totalEarned,
         totalPossible,
-        overallPct,
+        avgPct:         Math.round(avgPct * 10) / 10,
+        completionRate: Math.round(completionRate * 10) / 10,
+        leaderboardScore,
+        inactive,
         lastSubmissionTime,
+        rankingBreakdown: {
+          avgPctContribution:      Math.round(avgPctContribution * 10) / 10,
+          completionContribution:  Math.round(completionContribution * 10) / 10,
+          consistencyContribution: Math.round(consistencyContribution * 10) / 10,
+        },
         subjectScores: SUBJECTS.map(s => ({
           subject:  s,
           earned:   subjectScores[s].earned,
@@ -712,21 +766,28 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
       };
     });
 
-    // Sort: by overallPct desc, then lastSubmissionTime asc (person who finished early), then name asc
-    ranked.sort((a, b) => {
-      if (b.overallPct !== a.overallPct) {
-        return b.overallPct - a.overallPct;
-      }
-      if (a.lastSubmissionTime !== b.lastSubmissionTime) {
-        return a.lastSubmissionTime - b.lastSubmissionTime;
-      }
+    // ── Sort: 5-level hierarchical tie-breaking ─────────────────────────────────
+    // Active students first, then inactive; within each group:
+    // 1. leaderboardScore DESC
+    // 2. examsCompleted DESC
+    // 3. totalEarned DESC
+    // 4. lastSubmissionTime ASC (finished earlier wins)
+    // 5. name ASC
+    entries.sort((a, b) => {
+      // Active before inactive
+      if (a.inactive !== b.inactive) return a.inactive ? 1 : -1;
+      if (b.leaderboardScore !== a.leaderboardScore) return b.leaderboardScore - a.leaderboardScore;
+      if (b.examsCompleted   !== a.examsCompleted)   return b.examsCompleted   - a.examsCompleted;
+      if (b.totalEarned      !== a.totalEarned)       return b.totalEarned      - a.totalEarned;
+      if (a.lastSubmissionTime !== b.lastSubmissionTime) return a.lastSubmissionTime - b.lastSubmissionTime;
       return a.name.localeCompare(b.name);
     });
 
-    return res.status(200).json({ leaderboard: ranked });
+    return res.status(200).json({ leaderboard: entries, totalExams: totalExamsInSystem });
   } catch (err) {
     console.error('Error fetching leaderboard:', err);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
