@@ -23,6 +23,7 @@ import ProfileAvatar from '../../components/ProfileAvatar';
 interface OptionData {
   id: string;
   text: string;
+  imageUrl?: string | null;
 }
 
 interface QuestionReview {
@@ -650,9 +651,24 @@ const ExamReview: React.FC = () => {
                                 {icon ? icon : (
                                   <div style={{ width: 18, height: 18, border: '2px solid var(--border-color)', borderRadius: '50%', flexShrink: 0 }} />
                                 )}
-                                <span style={{ fontWeight: (isCorrectOpt || isSelected) ? 800 : 500, fontSize: '0.95rem' }}>
-                                  {opt.text}
-                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                                  <span style={{ fontWeight: (isCorrectOpt || isSelected) ? 800 : 500, fontSize: '0.95rem' }}>
+                                    {opt.text}
+                                  </span>
+                                  {opt.imageUrl && (
+                                    <img
+                                      src={opt.imageUrl}
+                                      alt="Option"
+                                      style={{
+                                        maxHeight: 140,
+                                        maxWidth: '100%',
+                                        border: '2px solid var(--border-color)',
+                                        borderRadius: 4,
+                                        objectFit: 'contain',
+                                      }}
+                                    />
+                                  )}
+                                </div>
                               </div>
                               {labelText && (
                                 <span style={{
