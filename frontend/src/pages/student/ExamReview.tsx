@@ -246,17 +246,17 @@ const ExamReview: React.FC = () => {
         {!loading && data && stats && (
           <div>
             {!data.graded ? (
-              <div className="neo-card" style={{
+              <div className="neo-card animate-fade-in-up" style={{
                 backgroundColor: 'var(--bg-color)',
-                border: '2.5px solid var(--border-color)',
-                padding: '40px',
+                border: '3px dashed var(--border-color)',
+                padding: '50px 40px',
                 textAlign: 'center',
                 marginTop: '30px'
               }}>
-                <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⏳</div>
-                <h2 style={{ textTransform: 'uppercase', fontWeight: 900, marginBottom: '12px' }}>Pending Review</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '1.05rem', maxWidth: '500px', margin: '0 auto', lineHeight: '1.6' }}>
-                  Your answers are awaiting evaluation by the instructor. Once the grading is completed by the teacher, your answers, scores, and feedback will be visible here.
+                <div className="neo-blink" style={{ fontSize: '3.5rem', marginBottom: '20px' }}>⏳</div>
+                <h2 style={{ textTransform: 'uppercase', fontWeight: 900, marginBottom: '12px', fontSize: '1.8rem', letterSpacing: '0.05em' }}>Pending Review</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '1.05rem', maxWidth: '540px', margin: '0 auto', lineHeight: '1.6', fontWeight: 600 }}>
+                  Your answers are awaiting evaluation by the instructor. Once grading is completed, your scores, correct answers, and feedback will be unlocked here.
                 </p>
               </div>
             ) : (
@@ -270,81 +270,82 @@ const ExamReview: React.FC = () => {
               marginBottom: '40px',
             }}>
               {/* Score */}
-              <div className="neo-card" style={{
+              <div className="neo-card animate-fade-in-up" style={{
+                animationDelay: '0.05s',
                 backgroundColor: !data.graded ? '#f3f4f6' : scoreColor(stats.pct),
-                display: 'flex', alignItems: 'center', gap: '14px', padding: '20px 24px',
+                display: 'flex', alignItems: 'center', gap: '16px', padding: '24px',
               }}>
                 <div style={{
                   backgroundColor: '#fff', border: '2px solid var(--border-color)',
-                  borderRadius: '4px', padding: '10px', display: 'flex', alignItems: 'center',
+                  borderRadius: '50%', padding: '12px', display: 'flex', alignItems: 'center',
                 }}>
-                  <TrendingUp size={22} />
+                  <TrendingUp size={24} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Final Score</div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Final Score</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 900, lineHeight: 1.1 }}>
                     {!data.graded ? (
                       <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>Pending</span>
                     ) : (
-                      <>{data.score} <span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--text-muted)' }}>/ {data.totalPoints}</span></>
+                      <>{data.score} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-muted)' }}>/ {data.totalPoints}</span></>
                     )}
                   </div>
-                  <div style={{ fontSize: '1rem', fontWeight: 800 }}>{!data.graded ? '—' : `${stats.pct}%`}</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, marginTop: 4 }}>{!data.graded ? '—' : `${stats.pct}%`}</div>
                 </div>
               </div>
 
               {/* Correct */}
-              <div className="neo-card" style={{ backgroundColor: '#d1fae5', display: 'flex', alignItems: 'center', gap: '14px', padding: '20px 24px' }}>
-                <div style={{ backgroundColor: '#fff', border: '2px solid var(--border-color)', borderRadius: '4px', padding: '10px', display: 'flex', alignItems: 'center' }}>
-                  <CheckCircle size={22} color="#059669" />
+              <div className="neo-card animate-fade-in-up" style={{ animationDelay: '0.1s', backgroundColor: '#d1fae5', display: 'flex', alignItems: 'center', gap: '16px', padding: '24px' }}>
+                <div style={{ backgroundColor: '#fff', border: '2px solid var(--border-color)', borderRadius: '50%', padding: '12px', display: 'flex', alignItems: 'center' }}>
+                  <CheckCircle size={24} color="#059669" />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Correct</div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>{stats.correct}</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Correct</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 900, lineHeight: 1.1, color: '#064e3b' }}>{stats.correct}</div>
                 </div>
               </div>
 
               {/* Incorrect */}
-              <div className="neo-card" style={{ backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', gap: '14px', padding: '20px 24px' }}>
-                <div style={{ backgroundColor: '#fff', border: '2px solid var(--border-color)', borderRadius: '4px', padding: '10px', display: 'flex', alignItems: 'center' }}>
-                  <XCircle size={22} color="#dc2626" />
+              <div className="neo-card animate-fade-in-up" style={{ animationDelay: '0.15s', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', gap: '16px', padding: '24px' }}>
+                <div style={{ backgroundColor: '#fff', border: '2px solid var(--border-color)', borderRadius: '50%', padding: '12px', display: 'flex', alignItems: 'center' }}>
+                  <XCircle size={24} color="#dc2626" />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Incorrect</div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>{stats.incorrect}</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Incorrect</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 900, lineHeight: 1.1, color: '#7f1d1d' }}>{stats.incorrect}</div>
                 </div>
               </div>
 
               {/* Skipped */}
-              <div className="neo-card" style={{ backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', gap: '14px', padding: '20px 24px' }}>
-                <div style={{ backgroundColor: '#fff', border: '2px solid var(--border-color)', borderRadius: '4px', padding: '10px', display: 'flex', alignItems: 'center' }}>
-                  <MinusCircle size={22} color="#6b7280" />
+              <div className="neo-card animate-fade-in-up" style={{ animationDelay: '0.2s', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', gap: '16px', padding: '24px' }}>
+                <div style={{ backgroundColor: '#fff', border: '2px solid var(--border-color)', borderRadius: '50%', padding: '12px', display: 'flex', alignItems: 'center' }}>
+                  <MinusCircle size={24} color="#6b7280" />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Skipped</div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>{stats.skipped}</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Skipped</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 900, lineHeight: 1.1, color: '#374151' }}>{stats.skipped}</div>
                 </div>
               </div>
 
               {/* Duration */}
-              <div className="neo-card" style={{ backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', gap: '14px', padding: '20px 24px' }}>
-                <div style={{ backgroundColor: 'var(--accent)', border: '2px solid var(--border-color)', borderRadius: '4px', padding: '10px', display: 'flex', alignItems: 'center' }}>
-                  <Clock size={22} />
+              <div className="neo-card animate-fade-in-up" style={{ animationDelay: '0.25s', backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', gap: '16px', padding: '24px' }}>
+                <div style={{ backgroundColor: 'var(--accent)', border: '2px solid var(--border-color)', borderRadius: '50%', padding: '12px', display: 'flex', alignItems: 'center' }}>
+                  <Clock size={24} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Duration</div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 900 }}>{data.durationMinutes} min</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Duration</div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 900, lineHeight: 1.1 }}>{data.durationMinutes} min</div>
                 </div>
               </div>
 
               {/* Date submitted */}
-              <div className="neo-card" style={{ backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', gap: '14px', padding: '20px 24px' }}>
-                <div style={{ backgroundColor: 'var(--secondary)', border: '2px solid var(--border-color)', borderRadius: '4px', padding: '10px', display: 'flex', alignItems: 'center' }}>
-                  <Calendar size={22} />
+              <div className="neo-card animate-fade-in-up" style={{ animationDelay: '0.3s', backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', gap: '16px', padding: '24px' }}>
+                <div style={{ backgroundColor: 'var(--secondary)', border: '2px solid var(--border-color)', borderRadius: '50%', padding: '12px', display: 'flex', alignItems: 'center' }}>
+                  <Calendar size={24} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Submitted On</div>
-                  <div style={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.3 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Submitted On</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, lineHeight: 1.3 }}>
                     {new Date(data.dateSubmitted).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                   </div>
                 </div>
@@ -352,7 +353,7 @@ const ExamReview: React.FC = () => {
             </div>
 
             {/* ── Legend ── */}
-            <div style={{ display: 'flex', gap: '20px', marginBottom: '28px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="animate-fade-in-up" style={{ animationDelay: '0.35s', display: 'flex', gap: '20px', marginBottom: '28px', flexWrap: 'wrap', alignItems: 'center' }}>
               <h2 style={{ textTransform: 'uppercase', fontWeight: 900, fontSize: '1.4rem', margin: 0 }}>
                 <HelpCircle size={20} style={{ verticalAlign: 'middle', marginRight: 6 }} />
                 Questions ({data.questions.length})
@@ -416,8 +417,13 @@ const ExamReview: React.FC = () => {
                 return (
                   <div
                     key={q.id}
-                    className="neo-card"
-                    style={{ padding: 0, overflow: 'hidden', backgroundColor: '#ffffff' }}
+                    className="neo-card animate-fade-in-up"
+                    style={{ 
+                      padding: 0, 
+                      overflow: 'hidden', 
+                      backgroundColor: '#ffffff',
+                      animationDelay: `${0.4 + (idx * 0.05)}s`
+                    }}
                   >
                     {/* Question header */}
                     <div style={{
@@ -499,20 +505,25 @@ const ExamReview: React.FC = () => {
                         {/* Student's answer */}
                         <div style={{
                           border: '2px solid var(--border-color)',
-                          borderRadius: 6,
+                          borderRadius: 8,
                           overflow: 'hidden',
                         }}>
                           <div style={{
                             backgroundColor: '#f3f4f6',
-                            padding: '8px 16px',
-                            fontSize: '0.72rem',
+                            padding: '10px 20px',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             textTransform: 'uppercase',
                             letterSpacing: '0.06em',
                             color: 'var(--text-muted)',
                             borderBottom: '2px solid var(--border-color)',
-                          }}>Your Answer</div>
-                          <div style={{ padding: '14px 16px', fontWeight: 600, whiteSpace: 'pre-wrap', minHeight: 60, color: q.subjectiveAnswer ? 'inherit' : '#9ca3af' }}>
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}>
+                            <BookOpen size={16} /> Your Answer
+                          </div>
+                          <div style={{ padding: '16px 20px', fontWeight: 600, whiteSpace: 'pre-wrap', minHeight: 60, fontSize: '1.05rem', color: q.subjectiveAnswer ? 'inherit' : '#9ca3af' }}>
                             {q.subjectiveAnswer || 'No answer provided.'}
                           </div>
                         </div>
