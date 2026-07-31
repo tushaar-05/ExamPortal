@@ -11,7 +11,9 @@ import {
   AlertTriangle,
   ShieldAlert,
   FileText,
-  ChevronRight
+  ChevronRight,
+  Minimize2,
+  Maximize2
 } from 'lucide-react';
 
 interface QuestionOption {
@@ -80,6 +82,9 @@ export const FinalExamLobby: React.FC = () => {
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+
+  // In-exam camera overlay UI state
+  const [cameraMinimized, setCameraMinimized] = useState(false);
 
   // Countdown until start time
   const [timeUntilStart, setTimeUntilStart] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
@@ -170,12 +175,14 @@ export const FinalExamLobby: React.FC = () => {
     }
   };
 
-  // Attach persisted stream to exam overlay video when it mounts
+  // Attach persisted stream to exam overlay video when it mounts or un-minimizes
   useEffect(() => {
     if (phase === 'EXAM' && examVideoRef.current && mediaStreamRef.current) {
-      examVideoRef.current.srcObject = mediaStreamRef.current;
+      if (examVideoRef.current.srcObject !== mediaStreamRef.current) {
+        examVideoRef.current.srcObject = mediaStreamRef.current;
+      }
     }
-  }, [phase]);
+  }, [phase, cameraMinimized]);
 
   // Fullscreen helper
   const requestFullscreenMode = () => {
@@ -337,11 +344,77 @@ export const FinalExamLobby: React.FC = () => {
     window.addEventListener('blur', onBlur);
     window.addEventListener('focus', onFocus);
 
+    // ── Anti-cheating & security event listeners ──
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'Examination is in progress. Are you sure you want to leave?';
+      return e.returnValue;
+    };
+
+    const preventCopyPaste = (e: Event) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const preventContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const preventSelection = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) {
+        return; // allow cursor navigation inside subjective textarea
+      }
+      e.preventDefault();
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+
+      // Block F12 & DevTools
+      if (e.key === 'F12' || e.keyCode === 123 || (isCtrlOrCmd && e.shiftKey && (key === 'i' || key === 'c' || key === 'j'))) {
+        e.preventDefault();
+        logProctoringViolation('DEVTOOLS_SHORTCUT');
+        return false;
+      }
+
+      // Block F5 & Refresh (Ctrl+R / Cmd+R / Ctrl+Shift+R)
+      if (e.key === 'F5' || (isCtrlOrCmd && key === 'r')) {
+        e.preventDefault();
+        return false;
+      }
+
+      // Block Copy, Paste, Cut, Print, Save, View Source
+      if (isCtrlOrCmd && (key === 'c' || key === 'v' || key === 'x' || key === 'u' || key === 's' || key === 'p')) {
+        e.preventDefault();
+        return false;
+      }
+    };
+
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('copy', preventCopyPaste);
+    document.addEventListener('cut', preventCopyPaste);
+    document.addEventListener('paste', preventCopyPaste);
+    document.addEventListener('contextmenu', preventContextMenu);
+    document.addEventListener('selectstart', preventSelection);
+    document.addEventListener('dragstart', preventCopyPaste);
+    window.addEventListener('keydown', onKeyDown, true);
+
     return () => {
       document.removeEventListener('fullscreenchange', onFullscreenChange);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('copy', preventCopyPaste);
+      document.removeEventListener('cut', preventCopyPaste);
+      document.removeEventListener('paste', preventCopyPaste);
+      document.removeEventListener('contextmenu', preventContextMenu);
+      document.removeEventListener('selectstart', preventSelection);
+      document.removeEventListener('dragstart', preventCopyPaste);
+      window.removeEventListener('keydown', onKeyDown, true);
     };
   }, [phase, triggerViolationGracePeriod, checkReturnToExam]);
 
@@ -749,16 +822,21 @@ export const FinalExamLobby: React.FC = () => {
                   </div>
                 ) : (
                   <div>
-                    <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', color: '#374151', marginBottom: '8px' }}>
-                      Your Answer (Subjective)
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', color: '#374151' }}>
+                        Your Response (Subjective)
+                      </label>
+                      <div style={{ fontSize: '0.78rem', color: '#6b7280', fontWeight: 700 }}>
+                        {selectedAnswer.subjectiveAnswer ? selectedAnswer.subjectiveAnswer.trim().split(/\s+/).filter(Boolean).length : 0} Words · {selectedAnswer.subjectiveAnswer ? selectedAnswer.subjectiveAnswer.length : 0} Characters
+                      </div>
+                    </div>
                     <textarea
                       value={selectedAnswer.subjectiveAnswer || ''}
                       onChange={e => setAnswers(prev => ({ ...prev, [answerKey]: { subjectiveAnswer: e.target.value } }))}
                       className="neo-input"
-                      rows={8}
-                      placeholder="Type your answer detailedly here..."
-                      style={{ width: '100%', resize: 'vertical', fontSize: '1rem', padding: '16px' }}
+                      rows={9}
+                      placeholder="Type your detailed answer here. Structure your response clearly..."
+                      style={{ width: '100%', resize: 'vertical', fontSize: '1rem', padding: '16px', lineHeight: 1.6 }}
                     />
                   </div>
                 )}
@@ -851,56 +929,107 @@ export const FinalExamLobby: React.FC = () => {
 
         </div>
 
-        {/* ── LIVE CAMERA PREVIEW + AUDIO LEVEL OVERLAY ─────────────────────── */}
+        {/* ── ENHANCED LIVE CAMERA PREVIEW + AUDIO LEVEL OVERLAY ─────────────────────── */}
         <div style={{
           position: 'fixed',
-          bottom: '20px',
-          right: '20px',
+          bottom: '24px',
+          right: '24px',
           zIndex: 9998,
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          gap: '6px',
-          pointerEvents: 'none'
+          alignItems: 'flex-end',
+          gap: '8px',
+          transition: 'all 0.25s ease'
         }}>
-          {/* Camera feed */}
-          <div style={{
-            width: '160px',
-            height: '100px',
-            background: '#000',
-            borderRadius: '10px',
-            overflow: 'hidden',
-            border: '2px solid var(--primary)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
-          }}>
-            <video
-              ref={examVideoRef}
-              autoPlay
-              playsInline
-              muted
-              style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
-            />
-          </div>
-          {/* Mic level bar */}
-          <div style={{
-            width: '160px',
-            background: '#1a1a1a',
-            border: '1.5px solid #333',
-            borderRadius: '6px',
-            padding: '5px 8px',
-            pointerEvents: 'none'
-          }}>
-            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '3px' }}>🎤 Mic Level</div>
-            <div style={{ width: '100%', height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{
-                height: '100%',
-                width: `${micLevel}%`,
-                background: micLevel > 60 ? '#ef4444' : micLevel > 30 ? '#f59e0b' : '#4ade80',
-                borderRadius: '3px',
-                transition: 'width 0.1s ease'
-              }} />
+          {cameraMinimized ? (
+            /* Minimized Pill View */
+            <button
+              onClick={() => setCameraMinimized(false)}
+              title="Expand Camera Proctoring Feed"
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                backgroundColor: '#1a1a1a',
+                border: '3px solid var(--primary)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                position: 'relative'
+              }}
+            >
+              <Camera size={24} color="var(--primary)" />
+              <span style={{ position: 'absolute', top: '2px', right: '2px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ef4444', border: '2px solid #1a1a1a' }} />
+            </button>
+          ) : (
+            /* Expanded Bigger Proctoring Card (250x155px video) */
+            <div style={{
+              width: '260px',
+              backgroundColor: '#18181b',
+              border: '2px solid var(--border-color)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+              color: '#fff'
+            }}>
+              {/* Overlay Top Bar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#09090b', borderBottom: '1px solid #27272a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444', animation: 'pulse 1.5s infinite' }} />
+                  <span style={{ fontSize: '0.7rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#f43f5e' }}>
+                    PROCTORING LIVE
+                  </span>
+                </div>
+                <button
+                  onClick={() => setCameraMinimized(true)}
+                  title="Minimize camera overlay"
+                  style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 }}
+                >
+                  <Minimize2 size={14} />
+                </button>
+              </div>
+
+              {/* Bigger Camera Video Feed */}
+              <div style={{ position: 'relative', width: '100%', height: '155px', backgroundColor: '#000' }}>
+                <video
+                  ref={(el) => {
+                    examVideoRef.current = el;
+                    if (el && mediaStreamRef.current && el.srcObject !== mediaStreamRef.current) {
+                      el.srcObject = mediaStreamRef.current;
+                    }
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+                />
+              </div>
+
+              {/* Live Mic Level Bar */}
+              <div style={{ padding: '8px 12px', backgroundColor: '#18181b' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#a1a1aa', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Mic size={12} color="var(--primary)" /> Mic Input
+                  </span>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 900, color: micLevel > 60 ? '#ef4444' : micLevel > 30 ? '#f59e0b' : '#4ade80' }}>
+                    {micLevel}%
+                  </span>
+                </div>
+                <div style={{ width: '100%', height: '6px', backgroundColor: '#27272a', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${micLevel}%`,
+                    backgroundColor: micLevel > 60 ? '#ef4444' : micLevel > 30 ? '#f59e0b' : '#4ade80',
+                    borderRadius: '3px',
+                    transition: 'width 0.1s ease'
+                  }} />
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* ── PROCTORING WARNING / GRACE PERIOD COUNTDOWN MODAL ─────────────── */}

@@ -187,6 +187,7 @@ const Exams: React.FC = () => {
   const [feStartTime, setFeStartTime] = useState('');
   const [feEndTime, setFeEndTime] = useState('');
   const [feGrace, setFeGrace] = useState(10);
+  const [fePassPercentage, setFePassPercentage] = useState(40);
   const [feSubjects, setFeSubjects] = useState<FinalExamSubject[]>([]);
   const [feFormError, setFeFormError] = useState<string | null>(null);
   const [feFormLoading, setFeFormLoading] = useState(false);
@@ -240,7 +241,7 @@ const Exams: React.FC = () => {
   const handleOpenCreateFinalExam = () => {
     setFinalExamModalType('create');
     setFeTitle(''); setFeDesc(''); setFeInstructions(''); setFeSyllabus('');
-    setFeStartTime(''); setFeEndTime(''); setFeGrace(10);
+    setFeStartTime(''); setFeEndTime(''); setFeGrace(10); setFePassPercentage(40);
     setFeSubjects([{ id: `subj_${Date.now()}`, name: 'Subject 1', questions: [] }]);
     setFeExpandedSubjects({ 0: true });
     setFeFormError(null);
@@ -252,7 +253,7 @@ const Exams: React.FC = () => {
     setFeTitle(fe.title); setFeDesc(fe.description || '');
     setFeInstructions(fe.instructions || ''); setFeSyllabus(fe.syllabus || '');
     setFeStartTime(toLocalDt(fe.startTime)); setFeEndTime(toLocalDt(fe.endTime));
-    setFeGrace(fe.gracePeriodSeconds);
+    setFeGrace(fe.gracePeriodSeconds); setFePassPercentage(fe.passPercentage || 40);
     setFeSubjects(JSON.parse(JSON.stringify(fe.subjects)));
     setFeExpandedSubjects({});
     setFeFormError(null);
@@ -275,7 +276,7 @@ const Exams: React.FC = () => {
         method, headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ title: feTitle, description: feDesc, instructions: feInstructions,
           syllabus: feSyllabus, durationMinutes: durMins, startTime: startDt.toISOString(),
-          endTime: endDt.toISOString(), gracePeriodSeconds: feGrace, subjects: feSubjects }),
+          endTime: endDt.toISOString(), gracePeriodSeconds: feGrace, passPercentage: fePassPercentage, subjects: feSubjects }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -1263,103 +1264,295 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
 
             {/* FinalExam create/edit modal */}
             {finalExamModalOpen && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 9999, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px' }}>
-                <div className="neo-card" style={{ width: '100%', maxWidth: 800, background: '#fff', padding: 36 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                    <h2 style={{ margin: 0, fontWeight: 900, textTransform: 'uppercase', fontSize: '1.4rem' }}>
-                      {finalExamModalType === 'create' ? 'Create Final Exam' : 'Edit Final Exam'}
-                    </h2>
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '36px 20px' }}>
+                <div className="neo-card" style={{ width: '100%', maxWidth: 900, background: '#fff', padding: 36 }}>
+                  {/* Modal Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, borderBottom: '2px solid var(--border-color)', paddingBottom: 16 }}>
+                    <div>
+                      <span style={{ background: 'var(--primary)', color: '#1a1a1a', padding: '3px 10px', borderRadius: 4, fontWeight: 900, fontSize: '0.72rem', textTransform: 'uppercase' }}>
+                        Final Examination Management
+                      </span>
+                      <h2 style={{ margin: '4px 0 0', fontWeight: 900, textTransform: 'uppercase', fontSize: '1.5rem' }}>
+                        {finalExamModalType === 'create' ? 'Create Final Examination' : 'Configure Final Examination'}
+                      </h2>
+                    </div>
                     <button onClick={() => setFinalExamModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '6px 10px', boxShadow: 'none' }}><X size={18} /></button>
                   </div>
-                  {feFormError && <div style={{ background: 'var(--danger)', color: '#fff', padding: '10px 16px', borderRadius: 6, marginBottom: 20, fontWeight: 700 }}>{feFormError}</div>}
+
+                  {feFormError && (
+                    <div style={{ background: 'var(--danger)', color: '#fff', padding: '12px 18px', borderRadius: 6, marginBottom: 24, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <AlertCircle size={18} /> <span>{feFormError}</span>
+                    </div>
+                  )}
+
                   <form onSubmit={handleFinalExamSubmit}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Exam Title *</label>
-                        <input value={feTitle} onChange={e => setFeTitle(e.target.value)} className="neo-input" placeholder="e.g. Final Term Examination 2026" style={{ width: '100%' }} />
+                    
+                    {/* SECTION 1: General Details */}
+                    <div style={{ background: '#fdfdfd', border: '2px solid var(--border-color)', borderRadius: 10, padding: 24, marginBottom: 24 }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <GraduationCap size={18} color="var(--primary)" /> 1. General Details & Pass Criteria
                       </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Description</label>
-                        <textarea value={feDesc} onChange={e => setFeDesc(e.target.value)} className="neo-input" rows={2} placeholder="Brief overview…" style={{ width: '100%', resize: 'vertical' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Start Date & Time *</label>
-                        <input type="datetime-local" value={feStartTime} onChange={e => setFeStartTime(e.target.value)} className="neo-input" style={{ width: '100%' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>End Date & Time *</label>
-                        <input type="datetime-local" value={feEndTime} onChange={e => setFeEndTime(e.target.value)} className="neo-input" style={{ width: '100%' }} />
-                        {feStartTime && feEndTime && new Date(feEndTime) > new Date(feStartTime) && (
-                          <p style={{ fontSize: '0.78rem', color: '#059669', marginTop: 4, fontWeight: 700 }}>
-                            Duration: {Math.round((new Date(feEndTime).getTime() - new Date(feStartTime).getTime()) / 60000)} minutes
-                          </p>
-                        )}
-                      </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Grace Period: <span style={{ color: 'var(--primary)' }}>{feGrace} seconds</span></label>
-                        <input type="range" min={5} max={60} value={feGrace} onChange={e => setFeGrace(Number(e.target.value))} style={{ width: '100%' }} />
-                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>Time students have to return to fullscreen before a violation is counted.</p>
-                      </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Instructions</label>
-                        <textarea value={feInstructions} onChange={e => setFeInstructions(e.target.value)} className="neo-input" rows={4} placeholder="Exam instructions shown to students before starting…" style={{ width: '100%', resize: 'vertical' }} />
-                      </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Syllabus</label>
-                        <textarea value={feSyllabus} onChange={e => setFeSyllabus(e.target.value)} className="neo-input" rows={4} placeholder="Topics covered in this exam…" style={{ width: '100%', resize: 'vertical' }} />
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+                        <div>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Exam Title *</label>
+                          <input
+                            value={feTitle}
+                            onChange={e => setFeTitle(e.target.value)}
+                            className="neo-input"
+                            placeholder="e.g. Annual Final Examination 2026"
+                            style={{ width: '100%', fontWeight: 700 }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Pass Percentage (%)</label>
+                          <input
+                            type="number"
+                            min={10}
+                            max={100}
+                            value={fePassPercentage}
+                            onChange={e => setFePassPercentage(Number(e.target.value))}
+                            className="neo-input"
+                            placeholder="40"
+                            style={{ width: '100%', fontWeight: 700 }}
+                          />
+                        </div>
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Exam Summary / Overview</label>
+                          <textarea
+                            value={feDesc}
+                            onChange={e => setFeDesc(e.target.value)}
+                            className="neo-input"
+                            rows={2}
+                            placeholder="Provide a brief summary of the examination..."
+                            style={{ width: '100%', resize: 'vertical' }}
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    {/* Subjects builder */}
-                    <div style={{ borderTop: '2px solid var(--border-color)', paddingTop: 20, marginBottom: 24 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                        <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem', textTransform: 'uppercase' }}>Subjects & Questions</h3>
-                        <button type="button" onClick={addFeSubject} className="neo-btn" style={{ padding: '6px 14px', fontSize: '0.82rem' }}><Plus size={14} /> Add Subject</button>
+                    {/* SECTION 2: Fixed Exam Schedule */}
+                    <div style={{ background: '#fdfdfd', border: '2px solid var(--border-color)', borderRadius: 10, padding: 24, marginBottom: 24 }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Clock size={18} color="var(--primary)" /> 2. Schedule & Proctoring Rules
                       </div>
-                      {feSubjects.map((subject, sIdx) => (
-                        <div key={subject.id} style={{ border: '2px solid var(--border-color)', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#f9fafb', borderBottom: feExpandedSubjects[sIdx] ? '2px solid var(--border-color)' : 'none' }}>
-                            <input value={subject.name} onChange={e => updateFeSubjectName(sIdx, e.target.value)}
-                              className="neo-input" placeholder="Subject name"
-                              style={{ flex: 1, padding: '6px 10px', fontSize: '0.9rem', fontWeight: 700 }} />
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{subject.questions.length} Qs</span>
-                            <button type="button" onClick={() => setFeExpandedSubjects(p => ({ ...p, [sIdx]: !p[sIdx] }))}
-                              className="neo-btn neo-btn-secondary" style={{ padding: '5px 10px', boxShadow: 'none' }}>
-                              {feExpandedSubjects[sIdx] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </button>
-                            {feSubjects.length > 1 && (
-                              <button type="button" onClick={() => removeFeSubject(sIdx)} className="neo-btn neo-btn-danger" style={{ padding: '5px 10px', boxShadow: 'none' }}><X size={14} /></button>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                        <div>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Fixed Start Time *</label>
+                          <input
+                            type="datetime-local"
+                            value={feStartTime}
+                            onChange={e => setFeStartTime(e.target.value)}
+                            className="neo-input"
+                            style={{ width: '100%', fontWeight: 700 }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Fixed End Time *</label>
+                          <input
+                            type="datetime-local"
+                            value={feEndTime}
+                            onChange={e => setFeEndTime(e.target.value)}
+                            className="neo-input"
+                            style={{ width: '100%', fontWeight: 700 }}
+                          />
+                        </div>
+                      </div>
+
+                      {feStartTime && feEndTime && (
+                        <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 8, padding: '10px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#166534', textTransform: 'uppercase' }}>
+                            Calculated Exam Window
+                          </span>
+                          <span style={{ background: '#166534', color: '#fff', padding: '3px 10px', borderRadius: 4, fontWeight: 900, fontSize: '0.82rem' }}>
+                            {(() => {
+                              const diffMins = Math.max(0, Math.round((new Date(feEndTime).getTime() - new Date(feStartTime).getTime()) / 60000));
+                              const hrs = Math.floor(diffMins / 60);
+                              const mins = diffMins % 60;
+                              return `${hrs > 0 ? `${hrs}h ` : ''}${mins} Minutes`;
+                            })()}
+                          </span>
+                        </div>
+                      )}
+
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', margin: 0 }}>
+                            Fullscreen Grace Period
+                          </label>
+                          <span style={{ background: 'var(--primary)', color: '#1a1a1a', padding: '2px 8px', borderRadius: 4, fontWeight: 900, fontSize: '0.8rem' }}>
+                            {feGrace} Seconds
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={5}
+                          max={60}
+                          value={feGrace}
+                          onChange={e => setFeGrace(Number(e.target.value))}
+                          style={{ width: '100%', cursor: 'pointer' }}
+                        />
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                          Grace countdown given to students when tab focus or fullscreen is temporarily interrupted before a proctoring violation is logged.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* SECTION 3: Instructions & Syllabus */}
+                    <div style={{ background: '#fdfdfd', border: '2px solid var(--border-color)', borderRadius: 10, padding: 24, marginBottom: 24 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <FileText size={18} color="var(--primary)" /> 3. Guidelines & Syllabus
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeInstructions(`1. Continuous webcam and microphone monitoring is enforced.
+2. Full Screen mode is strictly mandatory throughout the exam duration.
+3. Exiting full screen will trigger a 10-second grace countdown timer.
+4. You are allowed a maximum of 3 proctoring violation chances. Exceeding 3 chances will automatically submit your exam.
+5. All subjects must be completed within the combined fixed duration.`);
+                          }}
+                          className="neo-btn neo-btn-accent"
+                          style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                        >
+                          ✦ Insert Standard Instructions Template
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                        <div>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Exam Instructions</label>
+                          <textarea
+                            value={feInstructions}
+                            onChange={e => setFeInstructions(e.target.value)}
+                            className="neo-input"
+                            rows={5}
+                            placeholder="Rules and instructions displayed in waiting room..."
+                            style={{ width: '100%', resize: 'vertical' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Syllabus / Outline</label>
+                          <textarea
+                            value={feSyllabus}
+                            onChange={e => setFeSyllabus(e.target.value)}
+                            className="neo-input"
+                            rows={5}
+                            placeholder="Detailed syllabus topics covered in this exam..."
+                            style={{ width: '100%', resize: 'vertical' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 4: Multi-Subject & Question Builder */}
+                    <div style={{ borderTop: '3px solid var(--border-color)', paddingTop: 24, marginBottom: 28 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <div>
+                          <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', textTransform: 'uppercase' }}>4. Subject & Question Modules</h3>
+                          <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            Total Exam Marks: <strong>
+                              {feSubjects.reduce((tot, s) => tot + s.questions.reduce((qTot, q) => qTot + (q.points || 0), 0), 0)} Points
+                            </strong>
+                          </p>
+                        </div>
+                        <button type="button" onClick={addFeSubject} className="neo-btn" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>
+                          <Plus size={16} /> Add Subject
+                        </button>
+                      </div>
+
+                      {feSubjects.map((subject, sIdx) => {
+                        const subjMarks = subject.questions.reduce((tot, q) => tot + (q.points || 0), 0);
+                        return (
+                          <div key={subject.id} style={{ border: '2px solid var(--border-color)', borderRadius: 10, marginBottom: 16, overflow: 'hidden', background: '#fff' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#f9fafb', borderBottom: feExpandedSubjects[sIdx] ? '2px solid var(--border-color)' : 'none' }}>
+                              <input
+                                value={subject.name}
+                                onChange={e => updateFeSubjectName(sIdx, e.target.value)}
+                                className="neo-input"
+                                placeholder="Subject Name (e.g. Physics)"
+                                style={{ flex: 1, padding: '8px 12px', fontSize: '0.95rem', fontWeight: 800 }}
+                              />
+                              <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: 4, fontWeight: 800, fontSize: '0.78rem' }}>
+                                {subject.questions.length} Qs · {subjMarks} pts
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setFeExpandedSubjects(p => ({ ...p, [sIdx]: !p[sIdx] }))}
+                                className="neo-btn neo-btn-secondary"
+                                style={{ padding: '6px 12px', boxShadow: 'none' }}
+                              >
+                                {feExpandedSubjects[sIdx] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                              </button>
+                              {feSubjects.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeFeSubject(sIdx)}
+                                  className="neo-btn neo-btn-danger"
+                                  style={{ padding: '6px 12px', boxShadow: 'none' }}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+
+                            {feExpandedSubjects[sIdx] && (
+                              <div style={{ padding: 20 }}>
+                                {subject.questions.length === 0 ? (
+                                  <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                                    No questions added to {subject.name} yet. Click below to add MCQs or Subjective questions.
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                                    {subject.questions.map((q, qIdx) => (
+                                      <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#fff', border: '1.5px solid var(--border-color)', borderRadius: 8 }}>
+                                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                          <span style={{ background: q.type === 'MCQ' ? '#dbeafe' : '#fef3c7', color: q.type === 'MCQ' ? '#1e40af' : '#92400e', padding: '2px 6px', borderRadius: 4, fontWeight: 900, fontSize: '0.7rem' }}>
+                                            {q.type}
+                                          </span>
+                                          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a' }}>
+                                            {q.text.slice(0, 75)}{q.text.length > 75 ? '…' : ''}
+                                          </span>
+                                          {q.imageUrl && <span style={{ fontSize: '0.72rem', background: '#f3f4f6', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>🖼 Image</span>}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                          <span style={{ fontWeight: 900, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                                            {q.points} pts
+                                          </span>
+                                          <button type="button" onClick={() => openEditFeQuestion(sIdx, qIdx)} className="neo-btn neo-btn-accent" style={{ padding: '4px 10px', fontSize: '0.78rem', boxShadow: 'none' }}>
+                                            <Edit size={12} />
+                                          </button>
+                                          <button type="button" onClick={() => deleteFeQuestion(sIdx, qIdx)} className="neo-btn neo-btn-danger" style={{ padding: '4px 10px', fontSize: '0.78rem', boxShadow: 'none' }}>
+                                            <Trash2 size={12} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => openAddFeQuestion(sIdx)}
+                                  className="neo-btn"
+                                  style={{ width: '100%', padding: '10px', fontSize: '0.88rem', justifyContent: 'center' }}
+                                >
+                                  <Plus size={16} /> Add Question to {subject.name}
+                                </button>
+                              </div>
                             )}
                           </div>
-                          {feExpandedSubjects[sIdx] && (
-                            <div style={{ padding: 16 }}>
-                              {subject.questions.length === 0 ? (
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', margin: '8px 0 12px' }}>No questions yet.</p>
-                              ) : subject.questions.map((q, qIdx) => (
-                                <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fff', border: '1.5px solid var(--border-color)', borderRadius: 6, marginBottom: 6 }}>
-                                  <div style={{ flex: 1 }}>
-                                    <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{q.text.slice(0, 70)}{q.text.length > 70 ? '…' : ''}</span>
-                                    <span style={{ marginLeft: 8, fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>[{q.type}] {q.points}pts</span>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    <button type="button" onClick={() => openEditFeQuestion(sIdx, qIdx)} className="neo-btn neo-btn-accent" style={{ padding: '4px 10px', fontSize: '0.78rem', boxShadow: 'none' }}><Edit size={12} /></button>
-                                    <button type="button" onClick={() => deleteFeQuestion(sIdx, qIdx)} className="neo-btn neo-btn-danger" style={{ padding: '4px 10px', fontSize: '0.78rem', boxShadow: 'none' }}><Trash2 size={12} /></button>
-                                  </div>
-                                </div>
-                              ))}
-                              <button type="button" onClick={() => openAddFeQuestion(sIdx)} className="neo-btn" style={{ width: '100%', padding: '8px', fontSize: '0.85rem', justifyContent: 'center', marginTop: 4 }}>
-                                <Plus size={14} /> Add Question to {subject.name}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
+                    {/* Actions */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                       <button type="button" onClick={() => setFinalExamModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '10px 20px' }}>Cancel</button>
-                      <button type="submit" disabled={feFormLoading} className="neo-btn" style={{ padding: '10px 24px' }}>
-                        {feFormLoading ? 'Saving…' : finalExamModalType === 'create' ? 'Create Final Exam' : 'Save Changes'}
+                      <button type="submit" disabled={feFormLoading} className="neo-btn" style={{ padding: '10px 28px' }}>
+                        {feFormLoading ? 'Saving…' : finalExamModalType === 'create' ? 'Create Final Examination' : 'Save Final Exam Configuration'}
                       </button>
                     </div>
                   </form>
