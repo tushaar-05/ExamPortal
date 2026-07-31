@@ -3,15 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiFetch } from '../../utils/api';
 import {
   Trophy,
-  Award,
   CheckCircle,
   XCircle,
-  AlertTriangle,
   ArrowLeft,
-  BookOpen,
   FileText,
   MessageSquare,
-  HelpCircle,
   BarChart2,
   ShieldAlert
 } from 'lucide-react';

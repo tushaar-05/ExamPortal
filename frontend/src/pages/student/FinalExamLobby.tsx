@@ -10,13 +10,8 @@ import {
   CheckCircle,
   AlertTriangle,
   ShieldAlert,
-  ArrowRight,
-  Send,
-  HelpCircle,
   FileText,
-  Lock,
-  ChevronRight,
-  AlertCircle
+  ChevronRight
 } from 'lucide-react';
 
 interface QuestionOption {
@@ -100,7 +95,7 @@ export const FinalExamLobby: React.FC = () => {
   // Proctoring Grace Period states
   const [showGraceModal, setShowGraceModal] = useState(false);
   const [graceCountdown, setGraceCountdown] = useState<number>(10);
-  const graceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const graceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isSubmittingRef = useRef(false);
 
   // Modal confirm submit
@@ -524,7 +519,7 @@ export const FinalExamLobby: React.FC = () => {
                 <h3 style={{ textTransform: 'uppercase', fontWeight: 900, marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
                   <FileText size={20} /> Examination Instructions
                 </h3>
-                <div style={{ color: '#ccc', lineHeight: 1.7, fontSize: '0.95rem', whitespace: 'pre-line' }}>
+                <div style={{ color: '#ccc', lineHeight: 1.7, fontSize: '0.95rem', whiteSpace: 'pre-line' }}>
                   {exam.instructions || `1. Maintain continuous camera and microphone access.
 2. Full Screen mode is mandatory. Exiting full screen will trigger a proctoring warning.
 3. You have a 10-second grace period to return to full screen if interrupted.
@@ -538,7 +533,7 @@ export const FinalExamLobby: React.FC = () => {
                   <h3 style={{ textTransform: 'uppercase', fontWeight: 900, marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
                     <BookOpen size={20} /> Examination Syllabus
                   </h3>
-                  <div style={{ color: '#ccc', lineHeight: 1.7, fontSize: '0.95rem', whitespace: 'pre-line' }}>
+                  <div style={{ color: '#ccc', lineHeight: 1.7, fontSize: '0.95rem', whiteSpace: 'pre-line' }}>
                     {exam.syllabus}
                   </div>
                 </div>
@@ -547,7 +542,7 @@ export const FinalExamLobby: React.FC = () => {
 
             {/* Right Column: Pre-exam System Verification */}
             <div>
-              <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: '12px', padding: '24px', sticky: true, top: '20px' }}>
+              <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: '12px', padding: '24px', top: '20px' }}>
                 <h3 style={{ textTransform: 'uppercase', fontWeight: 900, marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '12px' }}>
                   Hardware Checks
                 </h3>
