@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
@@ -17,8 +17,16 @@ import {
   AlertCircle, 
   CheckCircle,
   ArrowLeft,
-  HelpCircle
+  HelpCircle,
+  GraduationCap,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Calendar,
+  Send
 } from 'lucide-react';
+
 
 interface Option {
   id: string;
@@ -53,6 +61,47 @@ interface Exam {
   type?: 'MCQ' | 'SUBJECTIVE' | null;
   createdAt: string;
 }
+
+// ── FinalExam types ───────────────────────────────────────────────────────────
+interface FinalExamOption {
+  id: string;
+  text: string;
+  imageUrl?: string | null;
+}
+
+interface FinalExamQuestion {
+  id: string;
+  text: string;
+  imageUrl?: string | null;
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  points: number;
+  type: 'MCQ' | 'SUBJECTIVE';
+  options: FinalExamOption[];
+  correctOptionId?: string | null;
+  correctSubjectiveAnswer?: string | null;
+  correctAnswerKeywords?: string | null;
+}
+
+interface FinalExamSubject {
+  id: string;
+  name: string;
+  questions: FinalExamQuestion[];
+}
+
+interface FinalExam {
+  id: string;
+  title: string;
+  description?: string | null;
+  instructions?: string | null;
+  syllabus?: string | null;
+  durationMinutes: number;
+  startTime: string;
+  endTime: string;
+  gracePeriodSeconds: number;
+  subjects: FinalExamSubject[];
+  createdAt: string;
+}
+
 
 const Exams: React.FC = () => {
   const { logout } = useAuth();
@@ -126,9 +175,277 @@ const Exams: React.FC = () => {
   const [deleteQuestionOpen, setDeleteQuestionOpen] = useState(false);
   const [questionToDelete, setQuestionToDelete] = useState<Question | null>(null);
 
+  // ── FinalExam state ──────────────────────────────────────────────────────────
+  const [finalExam, setFinalExam] = useState<FinalExam | null>(null);
+  const [finalExamLoading, setFinalExamLoading] = useState(true);
+  const [finalExamModalOpen, setFinalExamModalOpen] = useState(false);
+  const [finalExamModalType, setFinalExamModalType] = useState<'create' | 'edit'>('create');
+  const [feTitle, setFeTitle] = useState('');
+  const [feDesc, setFeDesc] = useState('');
+  const [feInstructions, setFeInstructions] = useState('');
+  const [feSyllabus, setFeSyllabus] = useState('');
+  const [feStartTime, setFeStartTime] = useState('');
+  const [feEndTime, setFeEndTime] = useState('');
+  const [feGrace, setFeGrace] = useState(10);
+  const [feSubjects, setFeSubjects] = useState<FinalExamSubject[]>([]);
+  const [feFormError, setFeFormError] = useState<string | null>(null);
+  const [feFormLoading, setFeFormLoading] = useState(false);
+  const [feDeleteConfirm, setFeDeleteConfirm] = useState(false);
+  const [feSuccess, setFeSuccess] = useState<string | null>(null);
+  // Subject question modal
+  const [feQModalOpen, setFeQModalOpen] = useState(false);
+  const [feQSubjectIdx, setFeQSubjectIdx] = useState(0);
+  const [feQEditIdx, setFeQEditIdx] = useState<number | null>(null);
+  const [feQText, setFeQText] = useState('');
+  const [feQImage, setFeQImage] = useState('');
+  const [feQDiff, setFeQDiff] = useState<'EASY'|'MEDIUM'|'HARD'>('MEDIUM');
+  const [feQPoints, setFeQPoints] = useState(10);
+  const [feQType, setFeQType] = useState<'MCQ'|'SUBJECTIVE'>('MCQ');
+  const [feQOpts, setFeQOpts] = useState(['','','','']);
+  const [feQOptImages, setFeQOptImages] = useState(['','','','']);
+  const [feQCorrectIdx, setFeQCorrectIdx] = useState(0);
+  const [feQSubjAnswer, setFeQSubjAnswer] = useState('');
+  const [feQKeywords, setFeQKeywords] = useState('');
+  const [feQError, setFeQError] = useState<string | null>(null);
+  const [feExpandedSubjects, setFeExpandedSubjects] = useState<Record<number,boolean>>({});
+
+  // Final Exam Submissions & Grading state
+  const [feSubmissionsModalOpen, setFeSubmissionsModalOpen] = useState(false);
+  const [feSubmissions, setFeSubmissions] = useState<any[]>([]);
+  const [feSubmissionsLoading, setFeSubmissionsLoading] = useState(false);
+  const [feGradingModalOpen, setFeGradingModalOpen] = useState(false);
+  const [feActiveSubmission, setFeActiveSubmission] = useState<any | null>(null);
+  const [feGradingScores, setFeGradingScores] = useState<Record<string, number>>({});
+  const [feGradingFeedbacks, setFeGradingFeedbacks] = useState<Record<string, string>>({});
+  const [feOverallFeedback, setFeOverallFeedback] = useState('');
+  const [feGradingSubmitting, setFeGradingSubmitting] = useState(false);
+  const [feGradingSubjectIdx, setFeGradingSubjectIdx] = useState(0);
+
+  const toLocalDt = (iso: string | null | undefined) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const fetchFinalExam = useCallback(async () => {
+    setFinalExamLoading(true);
+    try {
+      const res = await apiFetch('/admin/final-exam', { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok) setFinalExam(data.finalExams?.[0] ?? null);
+    } catch { /* ignore */ } finally { setFinalExamLoading(false); }
+  }, []);
+
+  const handleOpenCreateFinalExam = () => {
+    setFinalExamModalType('create');
+    setFeTitle(''); setFeDesc(''); setFeInstructions(''); setFeSyllabus('');
+    setFeStartTime(''); setFeEndTime(''); setFeGrace(10);
+    setFeSubjects([{ id: `subj_${Date.now()}`, name: 'Subject 1', questions: [] }]);
+    setFeExpandedSubjects({ 0: true });
+    setFeFormError(null);
+    setFinalExamModalOpen(true);
+  };
+
+  const handleOpenEditFinalExam = (fe: FinalExam) => {
+    setFinalExamModalType('edit');
+    setFeTitle(fe.title); setFeDesc(fe.description || '');
+    setFeInstructions(fe.instructions || ''); setFeSyllabus(fe.syllabus || '');
+    setFeStartTime(toLocalDt(fe.startTime)); setFeEndTime(toLocalDt(fe.endTime));
+    setFeGrace(fe.gracePeriodSeconds);
+    setFeSubjects(JSON.parse(JSON.stringify(fe.subjects)));
+    setFeExpandedSubjects({});
+    setFeFormError(null);
+    setFinalExamModalOpen(true);
+  };
+
+  const handleFinalExamSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeFormError(null); setFeFormLoading(true);
+    if (!feTitle.trim()) { setFeFormError('Title is required.'); setFeFormLoading(false); return; }
+    if (!feStartTime || !feEndTime) { setFeFormError('Start and end times are required.'); setFeFormLoading(false); return; }
+    const startDt = new Date(feStartTime);
+    const endDt = new Date(feEndTime);
+    if (endDt <= startDt) { setFeFormError('End time must be after start time.'); setFeFormLoading(false); return; }
+    const durMins = Math.round((endDt.getTime() - startDt.getTime()) / 60000);
+    try {
+      const url = finalExamModalType === 'create' ? '/admin/final-exam' : `/admin/final-exam/${finalExam?.id}`;
+      const method = finalExamModalType === 'create' ? 'POST' : 'PUT';
+      const res = await apiFetch(url, {
+        method, headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ title: feTitle, description: feDesc, instructions: feInstructions,
+          syllabus: feSyllabus, durationMinutes: durMins, startTime: startDt.toISOString(),
+          endTime: endDt.toISOString(), gracePeriodSeconds: feGrace, subjects: feSubjects }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setFeSuccess(`Final exam ${finalExamModalType === 'create' ? 'created' : 'updated'} successfully!`);
+        setFinalExamModalOpen(false);
+        fetchFinalExam();
+        setTimeout(() => setFeSuccess(null), 5000);
+      } else { setFeFormError(data.errors?.join(' ') || data.message || 'Failed to save.'); }
+    } catch { setFeFormError('Network error.'); } finally { setFeFormLoading(false); }
+  };
+
+  const handleDeleteFinalExam = async () => {
+    if (!finalExam) return;
+    try {
+      const res = await apiFetch(`/admin/final-exam/${finalExam.id}`, { method: 'DELETE', credentials: 'include' });
+      if (res.ok) {
+        setFeSuccess('Final exam deleted.');
+        setFeDeleteConfirm(false);
+        setFinalExam(null);
+        setTimeout(() => setFeSuccess(null), 4000);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const addFeSubject = () => setFeSubjects(prev => [...prev, { id: `subj_${Date.now()}`, name: `Subject ${prev.length + 1}`, questions: [] }]);
+  const removeFeSubject = (idx: number) => setFeSubjects(prev => prev.filter((_, i) => i !== idx));
+  const updateFeSubjectName = (idx: number, name: string) =>
+    setFeSubjects(prev => prev.map((s, i) => i === idx ? { ...s, name } : s));
+
+  const openAddFeQuestion = (sIdx: number) => {
+    setFeQSubjectIdx(sIdx); setFeQEditIdx(null);
+    setFeQText(''); setFeQImage(''); setFeQDiff('MEDIUM'); setFeQPoints(10); setFeQType('MCQ');
+    setFeQOpts(['','','','']); setFeQOptImages(['','','','']); setFeQCorrectIdx(0); setFeQSubjAnswer(''); setFeQKeywords('');
+    setFeQError(null); setFeQModalOpen(true);
+  };
+
+  const openEditFeQuestion = (sIdx: number, qIdx: number) => {
+    const q = feSubjects[sIdx].questions[qIdx];
+    setFeQSubjectIdx(sIdx); setFeQEditIdx(qIdx);
+    setFeQText(q.text); setFeQImage(q.imageUrl || ''); setFeQDiff(q.difficulty); setFeQPoints(q.points); setFeQType(q.type);
+    const optTexts = q.options.length >= 4 ? q.options.map(o => o.text) : ['','','',''];
+    const optImgs = q.options.length >= 4 ? q.options.map(o => o.imageUrl || '') : ['','','',''];
+    setFeQOpts(optTexts); setFeQOptImages(optImgs);
+    setFeQCorrectIdx(Math.max(0, q.options.findIndex(o => o.id === q.correctOptionId)));
+    setFeQSubjAnswer(q.correctSubjectiveAnswer || '');
+    setFeQKeywords(q.correctAnswerKeywords || '');
+    setFeQError(null); setFeQModalOpen(true);
+  };
+
+  const saveFeQuestion = () => {
+    if (!feQText.trim()) { setFeQError('Question text is required.'); return; }
+    if (feQType === 'MCQ' && feQOpts.some(o => !o.trim())) { setFeQError('All 4 options are required for MCQ.'); return; }
+    const options: FinalExamOption[] = feQType === 'MCQ'
+      ? feQOpts.map((t, i) => ({ id: `opt${i+1}`, text: t, imageUrl: feQOptImages[i].trim() !== '' ? feQOptImages[i] : null }))
+      : [];
+    const q: FinalExamQuestion = {
+      id: feQEditIdx !== null ? feSubjects[feQSubjectIdx].questions[feQEditIdx].id : `fq_${Date.now()}`,
+      text: feQText, imageUrl: feQImage.trim() !== '' ? feQImage : null, difficulty: feQDiff, points: feQPoints, type: feQType, options,
+      correctOptionId: feQType === 'MCQ' ? options[feQCorrectIdx].id : null,
+      correctSubjectiveAnswer: feQType === 'SUBJECTIVE' ? feQSubjAnswer : null,
+      correctAnswerKeywords: feQType === 'SUBJECTIVE' ? feQKeywords : null,
+    };
+    setFeSubjects(prev => prev.map((s, i) => {
+      if (i !== feQSubjectIdx) return s;
+      const qs = feQEditIdx !== null
+        ? s.questions.map((qq, qi) => qi === feQEditIdx ? q : qq)
+        : [...s.questions, q];
+      return { ...s, questions: qs };
+    }));
+    setFeQModalOpen(false);
+  };
+
+  const deleteFeQuestion = (sIdx: number, qIdx: number) =>
+    setFeSubjects(prev => prev.map((s, i) =>
+      i === sIdx ? { ...s, questions: s.questions.filter((_, qi) => qi !== qIdx) } : s));
+
+  // ── Final Exam Submissions & Grading ────────────────────────────────────────
+  const handleViewFeSubmissions = async (feId: string) => {
+    setFeSubmissionsLoading(true);
+    setFeSubmissionsModalOpen(true);
+    try {
+      const res = await apiFetch(`/admin/final-exam/${feId}/submissions`, { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok) setFeSubmissions(data.submissions || []);
+    } catch {
+      setError('Failed to load final exam submissions.');
+    } finally {
+      setFeSubmissionsLoading(false);
+    }
+  };
+
+  const handleOpenFeGradingModal = (sub: any) => {
+    setFeActiveSubmission(sub);
+    const scores: Record<string, number> = {};
+    const feedbacks: Record<string, string> = {};
+
+    sub.answers?.forEach((ans: any) => {
+      const key = `${ans.subjectId}__${ans.questionId}`;
+      scores[key] = ans.pointsEarned ?? 0;
+      feedbacks[key] = ans.feedback || '';
+    });
+
+    setFeGradingScores(scores);
+    setFeGradingFeedbacks(feedbacks);
+    setFeOverallFeedback(sub.overallFeedback || '');
+    setFeGradingSubjectIdx(0);
+    setFeGradingModalOpen(true);
+  };
+
+  const handleFeGradeSubmit = async (isPublishing: boolean) => {
+    if (!feActiveSubmission) return;
+    setFeGradingSubmitting(true);
+
+    const answersPayload = Object.keys(feGradingScores).map(key => {
+      const [subjectId, questionId] = key.split('__');
+      return {
+        subjectId,
+        questionId,
+        pointsEarned: Number(feGradingScores[key]),
+        feedback: feGradingFeedbacks[key] || null,
+      };
+    });
+
+    try {
+      const res = await apiFetch(`/admin/final-exam/submissions/${feActiveSubmission.id}/grade`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answers: answersPayload,
+          overallFeedback: feOverallFeedback,
+          isPublished: isPublishing ? true : feActiveSubmission.isPublished,
+        }),
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setFeSuccess(`Submission successfully ${isPublishing ? 'graded and published' : 'saved'}`);
+        setFeGradingModalOpen(false);
+        if (finalExam) handleViewFeSubmissions(finalExam.id);
+        setTimeout(() => setFeSuccess(null), 4000);
+      } else {
+        alert(data.message || 'Failed to save grade.');
+      }
+    } catch {
+      alert('Network error while grading.');
+    } finally {
+      setFeGradingSubmitting(false);
+    }
+  };
+
+  const handlePublishAllFeResults = async () => {
+    if (!finalExam) return;
+    try {
+      const res = await apiFetch(`/admin/final-exam/${finalExam.id}/publish`, {
+        method: 'PUT',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        setFeSuccess('All graded final exam results published!');
+        handleViewFeSubmissions(finalExam.id);
+        setTimeout(() => setFeSuccess(null), 4000);
+      }
+    } catch { /* ignore */ }
+  };
+
   const fetchExams = async () => {
     setLoading(true);
     setError(null);
+    fetchFinalExam();
     try {
       const response = await apiFetch('/admin/exams', {
         credentials: 'include',
@@ -167,7 +484,8 @@ const Exams: React.FC = () => {
 
   useEffect(() => {
     fetchExams();
-  }, []);
+    fetchFinalExam();
+  }, [fetchFinalExam]);
 
   const handleViewSubmissions = async (exam: Exam) => {
     const success = await fetchExamDetails(exam.id);
@@ -831,6 +1149,596 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
               </div>
             </header>
 
+            {/* ── FINAL EXAM PANEL ─────────────────────────────────────────────── */}
+            <div style={{ marginBottom: 40 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ background: '#1a1a1a', borderRadius: 8, padding: 10, border: '2px solid #1a1a1a', display: 'inline-flex' }}>
+                    <GraduationCap size={22} color="#fff" />
+                  </div>
+                  <div>
+                    <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', textTransform: 'uppercase' }}>Final Examination</h2>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>Multi-subject final exam · Fixed start time · Full proctoring</p>
+                  </div>
+                </div>
+                {!finalExam && !finalExamLoading && (
+                  <button onClick={handleOpenCreateFinalExam} className="neo-btn" style={{ padding: '8px 16px' }}>
+                    <Plus size={16} /> Create Final Exam
+                  </button>
+                )}
+              </div>
+
+              {feSuccess && (
+                <div className="neo-card" style={{ backgroundColor: 'var(--accent-green)', color: 'var(--text-color)', marginBottom: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <CheckCircle size={18} /><span>{feSuccess}</span>
+                </div>
+              )}
+
+              {finalExamLoading ? (
+                <div className="neo-card" style={{ backgroundColor: '#fff', textAlign: 'center', padding: '28px 20px' }}>
+                  <p style={{ fontWeight: 700, color: 'var(--text-muted)', margin: 0 }}>Loading final exam data…</p>
+                </div>
+              ) : finalExam ? (() => {
+                const now = new Date();
+                const start = new Date(finalExam.startTime);
+                const end = new Date(finalExam.endTime);
+                const feStatus = now < start ? 'UPCOMING' : now <= end ? 'LIVE' : 'ENDED';
+                const totalQs = finalExam.subjects.reduce((s: number, sub: FinalExamSubject) => s + sub.questions.length, 0);
+                return (
+                  <div className="neo-card" style={{ backgroundColor: '#fff', borderLeft: '8px solid #1a1a1a', padding: 24 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <span style={{
+                            background: feStatus === 'LIVE' ? '#dcfce7' : feStatus === 'UPCOMING' ? '#dbeafe' : '#f3f4f6',
+                            color: feStatus === 'LIVE' ? '#166534' : feStatus === 'UPCOMING' ? '#1e40af' : '#374151',
+                            border: `1.5px solid ${feStatus === 'LIVE' ? '#166534' : feStatus === 'UPCOMING' ? '#1e40af' : '#9ca3af'}`,
+                            borderRadius: 6, padding: '3px 10px', fontWeight: 900, fontSize: '0.72rem', textTransform: 'uppercase' as const
+                          }}>
+                            {feStatus === 'LIVE' ? '🟢 Live Now' : feStatus === 'UPCOMING' ? '🗓 Upcoming' : '⏰ Ended'}
+                          </span>
+                          <span style={{ fontWeight: 900, fontSize: '1.25rem' }}>{finalExam.title}</span>
+                        </div>
+                        {finalExam.description && <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: 12 }}>{finalExam.description}</p>}
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '0.82rem', fontWeight: 700 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f3f4f6', padding: '4px 10px', borderRadius: 4, border: '1px solid #e5e7eb' }}>
+                            <Clock size={13} /> {finalExam.durationMinutes} mins
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f3f4f6', padding: '4px 10px', borderRadius: 4, border: '1px solid #e5e7eb' }}>
+                            <BookOpen size={13} /> {finalExam.subjects.length} subjects · {totalQs} questions
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f3f4f6', padding: '4px 10px', borderRadius: 4, border: '1px solid #e5e7eb' }}>
+                            <Calendar size={13} /> {start.toLocaleString()} → {end.toLocaleString()}
+                          </span>
+                        </div>
+                        {finalExam.subjects.length > 0 && (
+                          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {finalExam.subjects.map((s: FinalExamSubject) => (
+                              <span key={s.id} style={{ background: 'var(--primary)', border: '2px solid var(--border-color)', borderRadius: 6, padding: '4px 12px', fontWeight: 800, fontSize: '0.82rem' }}>
+                                {s.name} · {s.questions.length} Qs
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                        <button onClick={() => handleViewFeSubmissions(finalExam.id)} className="neo-btn neo-btn-secondary" style={{ padding: '7px 14px', fontSize: '0.85rem' }}>
+                          <Users size={14} /> Submissions & Grading
+                        </button>
+                        <button onClick={() => handleOpenEditFinalExam(finalExam)} className="neo-btn neo-btn-accent" style={{ padding: '7px 14px', fontSize: '0.85rem' }}>
+                          <Edit size={14} /> Edit
+                        </button>
+                        <button onClick={() => setFeDeleteConfirm(true)} className="neo-btn neo-btn-danger" style={{ padding: '7px 14px', fontSize: '0.85rem' }}>
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div className="neo-card" style={{ textAlign: 'center', padding: '40px 20px', backgroundColor: '#fafafa', border: '2px dashed var(--border-color)' }}>
+                  <GraduationCap size={40} style={{ margin: '0 auto 12px', opacity: 0.2 }} />
+                  <h3 style={{ fontWeight: 900, textTransform: 'uppercase', marginBottom: 6 }}>No Final Exam Configured</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>Create a final examination with multiple subjects and fixed timing.</p>
+                  <button onClick={handleOpenCreateFinalExam} className="neo-btn" style={{ padding: '8px 20px' }}>
+                    <Plus size={16} /> Create Final Exam
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Delete FinalExam confirm */}
+            {feDeleteConfirm && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="neo-card" style={{ width: 420, background: '#fff', padding: 32 }}>
+                  <h3 style={{ fontWeight: 900, textTransform: 'uppercase', marginBottom: 12 }}>Delete Final Exam?</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>This will permanently delete the final exam and all student data. Cannot be undone.</p>
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                    <button onClick={() => setFeDeleteConfirm(false)} className="neo-btn neo-btn-secondary" style={{ padding: '8px 16px' }}>Cancel</button>
+                    <button onClick={handleDeleteFinalExam} className="neo-btn neo-btn-danger" style={{ padding: '8px 16px' }}>Delete</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* FinalExam create/edit modal */}
+            {finalExamModalOpen && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 9999, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px' }}>
+                <div className="neo-card" style={{ width: '100%', maxWidth: 800, background: '#fff', padding: 36 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                    <h2 style={{ margin: 0, fontWeight: 900, textTransform: 'uppercase', fontSize: '1.4rem' }}>
+                      {finalExamModalType === 'create' ? 'Create Final Exam' : 'Edit Final Exam'}
+                    </h2>
+                    <button onClick={() => setFinalExamModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '6px 10px', boxShadow: 'none' }}><X size={18} /></button>
+                  </div>
+                  {feFormError && <div style={{ background: 'var(--danger)', color: '#fff', padding: '10px 16px', borderRadius: 6, marginBottom: 20, fontWeight: 700 }}>{feFormError}</div>}
+                  <form onSubmit={handleFinalExamSubmit}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Exam Title *</label>
+                        <input value={feTitle} onChange={e => setFeTitle(e.target.value)} className="neo-input" placeholder="e.g. Final Term Examination 2026" style={{ width: '100%' }} />
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Description</label>
+                        <textarea value={feDesc} onChange={e => setFeDesc(e.target.value)} className="neo-input" rows={2} placeholder="Brief overview…" style={{ width: '100%', resize: 'vertical' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Start Date & Time *</label>
+                        <input type="datetime-local" value={feStartTime} onChange={e => setFeStartTime(e.target.value)} className="neo-input" style={{ width: '100%' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>End Date & Time *</label>
+                        <input type="datetime-local" value={feEndTime} onChange={e => setFeEndTime(e.target.value)} className="neo-input" style={{ width: '100%' }} />
+                        {feStartTime && feEndTime && new Date(feEndTime) > new Date(feStartTime) && (
+                          <p style={{ fontSize: '0.78rem', color: '#059669', marginTop: 4, fontWeight: 700 }}>
+                            Duration: {Math.round((new Date(feEndTime).getTime() - new Date(feStartTime).getTime()) / 60000)} minutes
+                          </p>
+                        )}
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Grace Period: <span style={{ color: 'var(--primary)' }}>{feGrace} seconds</span></label>
+                        <input type="range" min={5} max={60} value={feGrace} onChange={e => setFeGrace(Number(e.target.value))} style={{ width: '100%' }} />
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>Time students have to return to fullscreen before a violation is counted.</p>
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Instructions</label>
+                        <textarea value={feInstructions} onChange={e => setFeInstructions(e.target.value)} className="neo-input" rows={4} placeholder="Exam instructions shown to students before starting…" style={{ width: '100%', resize: 'vertical' }} />
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Syllabus</label>
+                        <textarea value={feSyllabus} onChange={e => setFeSyllabus(e.target.value)} className="neo-input" rows={4} placeholder="Topics covered in this exam…" style={{ width: '100%', resize: 'vertical' }} />
+                      </div>
+                    </div>
+
+                    {/* Subjects builder */}
+                    <div style={{ borderTop: '2px solid var(--border-color)', paddingTop: 20, marginBottom: 24 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem', textTransform: 'uppercase' }}>Subjects & Questions</h3>
+                        <button type="button" onClick={addFeSubject} className="neo-btn" style={{ padding: '6px 14px', fontSize: '0.82rem' }}><Plus size={14} /> Add Subject</button>
+                      </div>
+                      {feSubjects.map((subject, sIdx) => (
+                        <div key={subject.id} style={{ border: '2px solid var(--border-color)', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#f9fafb', borderBottom: feExpandedSubjects[sIdx] ? '2px solid var(--border-color)' : 'none' }}>
+                            <input value={subject.name} onChange={e => updateFeSubjectName(sIdx, e.target.value)}
+                              className="neo-input" placeholder="Subject name"
+                              style={{ flex: 1, padding: '6px 10px', fontSize: '0.9rem', fontWeight: 700 }} />
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{subject.questions.length} Qs</span>
+                            <button type="button" onClick={() => setFeExpandedSubjects(p => ({ ...p, [sIdx]: !p[sIdx] }))}
+                              className="neo-btn neo-btn-secondary" style={{ padding: '5px 10px', boxShadow: 'none' }}>
+                              {feExpandedSubjects[sIdx] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                            {feSubjects.length > 1 && (
+                              <button type="button" onClick={() => removeFeSubject(sIdx)} className="neo-btn neo-btn-danger" style={{ padding: '5px 10px', boxShadow: 'none' }}><X size={14} /></button>
+                            )}
+                          </div>
+                          {feExpandedSubjects[sIdx] && (
+                            <div style={{ padding: 16 }}>
+                              {subject.questions.length === 0 ? (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', margin: '8px 0 12px' }}>No questions yet.</p>
+                              ) : subject.questions.map((q, qIdx) => (
+                                <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fff', border: '1.5px solid var(--border-color)', borderRadius: 6, marginBottom: 6 }}>
+                                  <div style={{ flex: 1 }}>
+                                    <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{q.text.slice(0, 70)}{q.text.length > 70 ? '…' : ''}</span>
+                                    <span style={{ marginLeft: 8, fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>[{q.type}] {q.points}pts</span>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button type="button" onClick={() => openEditFeQuestion(sIdx, qIdx)} className="neo-btn neo-btn-accent" style={{ padding: '4px 10px', fontSize: '0.78rem', boxShadow: 'none' }}><Edit size={12} /></button>
+                                    <button type="button" onClick={() => deleteFeQuestion(sIdx, qIdx)} className="neo-btn neo-btn-danger" style={{ padding: '4px 10px', fontSize: '0.78rem', boxShadow: 'none' }}><Trash2 size={12} /></button>
+                                  </div>
+                                </div>
+                              ))}
+                              <button type="button" onClick={() => openAddFeQuestion(sIdx)} className="neo-btn" style={{ width: '100%', padding: '8px', fontSize: '0.85rem', justifyContent: 'center', marginTop: 4 }}>
+                                <Plus size={14} /> Add Question to {subject.name}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                      <button type="button" onClick={() => setFinalExamModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '10px 20px' }}>Cancel</button>
+                      <button type="submit" disabled={feFormLoading} className="neo-btn" style={{ padding: '10px 24px' }}>
+                        {feFormLoading ? 'Saving…' : finalExamModalType === 'create' ? 'Create Final Exam' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* FinalExam question add/edit modal */}
+            {feQModalOpen && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                <div className="neo-card" style={{ width: '100%', maxWidth: 560, background: '#fff', padding: 32, maxHeight: '90vh', overflowY: 'auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                    <h3 style={{ margin: 0, fontWeight: 900, textTransform: 'uppercase' }}>{feQEditIdx !== null ? 'Edit' : 'Add'} Question</h3>
+                    <button onClick={() => setFeQModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '5px 9px', boxShadow: 'none' }}><X size={16} /></button>
+                  </div>
+                  {feQError && <div style={{ background: 'var(--danger)', color: '#fff', padding: '8px 14px', borderRadius: 6, marginBottom: 16, fontWeight: 700 }}>{feQError}</div>}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Question Text *</label>
+                    <textarea value={feQText} onChange={e => setFeQText(e.target.value)} className="neo-input" rows={3} style={{ width: '100%', resize: 'vertical' }} placeholder="Enter question…" />
+                  </div>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Question Image (Optional)</label>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <input type="file" accept="image/*" onChange={e => handleImageUpload(e, setFeQImage)} style={{ fontSize: '0.8rem' }} />
+                      {feQImage && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <img src={feQImage} alt="Question diagram" style={{ height: 40, width: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #ccc' }} />
+                          <button type="button" onClick={() => setFeQImage('')} style={{ color: 'red', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 900 }}>✕</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+                    <div>
+                      <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Type</label>
+                      <select value={feQType} onChange={e => setFeQType(e.target.value as 'MCQ'|'SUBJECTIVE')} className="neo-input" style={{ width: '100%' }}>
+                        <option value="MCQ">MCQ</option>
+                        <option value="SUBJECTIVE">Subjective</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Difficulty</label>
+                      <select value={feQDiff} onChange={e => setFeQDiff(e.target.value as 'EASY'|'MEDIUM'|'HARD')} className="neo-input" style={{ width: '100%' }}>
+                        <option value="EASY">Easy</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="HARD">Hard</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Points</label>
+                      <input type="number" value={feQPoints} onChange={e => setFeQPoints(Number(e.target.value))} className="neo-input" style={{ width: '100%' }} min={1} />
+                    </div>
+                  </div>
+                  {feQType === 'MCQ' ? (
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Options (select correct one & upload images if needed)</label>
+                      {feQOpts.map((opt, i) => (
+                        <div key={i} style={{ marginBottom: 10, background: '#f9fafb', padding: 8, borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <input type="radio" name="feCorrect" checked={feQCorrectIdx === i} onChange={() => setFeQCorrectIdx(i)} />
+                            <input value={opt} onChange={e => setFeQOpts(p => p.map((o, oi) => oi === i ? e.target.value : o))}
+                              className="neo-input" placeholder={`Option ${String.fromCharCode(65+i)}`} style={{ flex: 1 }} />
+                            <input type="file" accept="image/*" onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const compressed = await compressImage(file);
+                              const formData = new FormData();
+                              formData.append('image', compressed);
+                              const res = await apiFetch('/upload', { method: 'POST', body: formData, credentials: 'include' });
+                              const d = await res.json();
+                              if (res.ok) setFeQOptImages(prev => prev.map((img, idx) => idx === i ? d.url : img));
+                            }} style={{ fontSize: '0.72rem', width: 140 }} />
+                          </div>
+                          {feQOptImages[i] && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, marginLeft: 28 }}>
+                              <img src={feQOptImages[i]} alt={`Option ${i+1}`} style={{ height: 36, width: 36, objectFit: 'cover', borderRadius: 4, border: '1px solid #ccc' }} />
+                              <button type="button" onClick={() => setFeQOptImages(prev => prev.map((img, idx) => idx === i ? '' : img))} style={{ color: 'red', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 900 }}>✕</button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Model Answer</label>
+                      <textarea value={feQSubjAnswer} onChange={e => setFeQSubjAnswer(e.target.value)} className="neo-input" rows={3} style={{ width: '100%', resize: 'vertical' }} placeholder="Expected answer…" />
+                      <label style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', display: 'block', margin: '10px 0 6px' }}>Keywords (comma-separated)</label>
+                      <input value={feQKeywords} onChange={e => setFeQKeywords(e.target.value)} className="neo-input" style={{ width: '100%' }} placeholder="e.g. photosynthesis, chlorophyll" />
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                    <button type="button" onClick={() => setFeQModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '8px 16px' }}>Cancel</button>
+                    <button type="button" onClick={saveFeQuestion} className="neo-btn" style={{ padding: '8px 20px' }}>Save Question</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── FINAL EXAM SUBMISSIONS LIST MODAL ──────────────────────────── */}
+            {feSubmissionsModalOpen && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                <div className="neo-card" style={{ width: '100%', maxWidth: 900, background: '#fff', padding: 32, maxHeight: '90vh', overflowY: 'auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '2px solid var(--border-color)', paddingBottom: 16 }}>
+                    <div>
+                      <h2 style={{ margin: 0, fontWeight: 900, textTransform: 'uppercase', fontSize: '1.4rem' }}>Final Exam Submissions</h2>
+                      <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{finalExam?.title}</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button onClick={handlePublishAllFeResults} className="neo-btn neo-btn-accent" style={{ padding: '6px 14px', fontSize: '0.82rem' }}>
+                        <Send size={14} /> Publish All Results
+                      </button>
+                      <button onClick={() => setFeSubmissionsModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '5px 9px', boxShadow: 'none' }}><X size={16} /></button>
+                    </div>
+                  </div>
+
+                  {feSubmissionsLoading ? (
+                    <div style={{ textAlign: 'center', padding: 40, fontWeight: 700 }}>Loading student submissions…</div>
+                  ) : feSubmissions.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No submissions found for this exam yet.</div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--primary)', borderBottom: '2px solid var(--border-color)' }}>
+                          <th style={{ padding: '12px 16px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.8rem' }}>Student</th>
+                          <th style={{ padding: '12px 16px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.8rem' }}>Date</th>
+                          <th style={{ padding: '12px 16px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.8rem' }}>Score</th>
+                          <th style={{ padding: '12px 16px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.8rem' }}>Evaluation Status</th>
+                          <th style={{ padding: '12px 16px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.8rem' }}>Result Visibility</th>
+                          <th style={{ padding: '12px 16px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.8rem', textAlign: 'center' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {feSubmissions.map((sub: any) => (
+                          <tr key={sub.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 700 }}>
+                              <div>{sub.userName || 'Student'}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400 }}>{sub.userEmail}</div>
+                            </td>
+                            <td style={{ padding: '12px 16px', fontSize: '0.82rem' }}>{new Date(sub.createdAt).toLocaleString()}</td>
+                            <td style={{ padding: '12px 16px', fontWeight: 900 }}>{sub.score} / {sub.totalPoints}</td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{
+                                background: sub.graded ? '#dcfce7' : '#fef3c7',
+                                color: sub.graded ? '#166534' : '#92400e',
+                                padding: '3px 8px', borderRadius: 4, fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase'
+                              }}>
+                                {sub.graded ? '✓ Graded' : '⏳ Pending Review'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{
+                                background: sub.isPublished ? '#dbeafe' : '#f3f4f6',
+                                color: sub.isPublished ? '#1e40af' : '#4b5563',
+                                padding: '3px 8px', borderRadius: 4, fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase'
+                              }}>
+                                {sub.isPublished ? 'Published' : 'Hidden (Pending)'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <button onClick={() => handleOpenFeGradingModal(sub)} className="neo-btn" style={{ padding: '5px 12px', fontSize: '0.78rem', boxShadow: 'none' }}>
+                                Grade / Review
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── FINAL EXAM EVALUATION & GRADING MODAL ───────────────────────── */}
+            {feGradingModalOpen && feActiveSubmission && finalExam && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                <div className="neo-card" style={{ width: '100%', maxWidth: 960, background: '#fff', padding: 32, maxHeight: '92vh', overflowY: 'auto' }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '2px solid var(--border-color)', paddingBottom: 16 }}>
+                    <div>
+                      <span style={{ background: 'var(--primary)', color: '#1a1a1a', padding: '2px 8px', borderRadius: 4, fontWeight: 900, fontSize: '0.72rem', textTransform: 'uppercase' }}>
+                        Submission Evaluation
+                      </span>
+                      <h2 style={{ margin: '4px 0 0', fontWeight: 900, textTransform: 'uppercase', fontSize: '1.4rem' }}>
+                        {feActiveSubmission.userName || 'Student'}
+                      </h2>
+                      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>{feActiveSubmission.userEmail}</p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <div style={{ background: '#f3f4f6', padding: '6px 14px', borderRadius: 6, fontWeight: 900, fontSize: '0.9rem' }}>
+                        Calculated Score: <span style={{ color: 'var(--primary)' }}>
+                          {Object.values(feGradingScores).reduce((a, b) => a + Number(b || 0), 0)} / {feActiveSubmission.totalPoints}
+                        </span>
+                      </div>
+                      <button onClick={() => setFeGradingModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '6px 10px', boxShadow: 'none' }}><X size={18} /></button>
+                    </div>
+                  </div>
+
+                  {/* Subject Tabs */}
+                  <div style={{ display: 'flex', gap: 6, borderBottom: '2px solid var(--border-color)', marginBottom: 20 }}>
+                    {finalExam.subjects.map((subj: FinalExamSubject, sIdx: number) => (
+                      <button
+                        key={subj.id}
+                        onClick={() => setFeGradingSubjectIdx(sIdx)}
+                        style={{
+                          padding: '8px 16px',
+                          fontWeight: 900,
+                          fontSize: '0.85rem',
+                          border: 'none',
+                          borderBottom: feGradingSubjectIdx === sIdx ? '4px solid var(--primary)' : '4px solid transparent',
+                          background: feGradingSubjectIdx === sIdx ? '#f9fafb' : 'transparent',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {subj.name} ({subj.questions.length} Qs)
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Subject Questions list */}
+                  {(() => {
+                    const currentSubj = finalExam.subjects[feGradingSubjectIdx];
+                    if (!currentSubj) return null;
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
+                        {currentSubj.questions.map((q: FinalExamQuestion, qIdx: number) => {
+                          const key = `${currentSubj.id}__${q.id}`;
+                          const origAns = feActiveSubmission.answers?.find((a: any) => a.questionId === q.id && a.subjectId === currentSubj.id);
+                          const isMcq = q.type === 'MCQ';
+
+                          return (
+                            <div key={q.id} style={{ border: '2px solid var(--border-color)', borderRadius: 8, padding: 20, background: '#fff' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                <span style={{ fontWeight: 900, fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                                  Question {qIdx + 1} [{q.type}] ({q.difficulty})
+                                </span>
+                                <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: 4, fontWeight: 800, fontSize: '0.75rem' }}>
+                                  Max Points: {q.points}
+                                </span>
+                              </div>
+
+                              <h4 style={{ margin: '0 0 10px', fontSize: '1rem', fontWeight: 800 }}>{q.text}</h4>
+
+                              {q.imageUrl && (
+                                <img src={q.imageUrl} alt="Question diagram" style={{ maxHeight: 160, borderRadius: 6, marginBottom: 12, border: '1px solid #ccc' }} />
+                              )}
+
+                              {/* Student Answer & Options View */}
+                              {isMcq ? (
+                                <div style={{ marginBottom: 14, background: '#f9fafb', padding: 12, borderRadius: 6 }}>
+                                  <div style={{ fontSize: '0.82rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>MCQ Options:</div>
+                                  {q.options?.map((opt: FinalExamOption) => {
+                                    const isCorrect = opt.id === q.correctOptionId;
+                                    const isSelected = origAns?.optionId === opt.id;
+                                    return (
+                                      <div key={opt.id} style={{
+                                        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 4, marginBottom: 4,
+                                        background: isCorrect ? '#dcfce7' : isSelected ? '#fee2e2' : 'transparent',
+                                        border: isCorrect ? '1px solid #166534' : isSelected ? '1px solid #ef4444' : '1px solid transparent',
+                                        fontWeight: isSelected || isCorrect ? 800 : 500, fontSize: '0.85rem'
+                                      }}>
+                                        <span>{isCorrect ? '✓ [Correct]' : isSelected ? '✗ [Student Picked]' : '•'}</span>
+                                        <span>{opt.text}</span>
+                                        {opt.imageUrl && <img src={opt.imageUrl} alt="Option" style={{ height: 28, borderRadius: 4 }} />}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div style={{ marginBottom: 14 }}>
+                                  <div style={{ fontSize: '0.82rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Student's Subjective Response:</div>
+                                  <div style={{ background: '#f9fafb', border: '1.5px solid #d1d5db', padding: 14, borderRadius: 6, fontSize: '0.92rem', whiteSpace: 'pre-line', marginBottom: 10 }}>
+                                    {origAns?.subjectiveAnswer || <span style={{ color: 'red', fontStyle: 'italic' }}>No answer provided.</span>}
+                                  </div>
+                                  {q.correctSubjectiveAnswer && (
+                                    <div style={{ fontSize: '0.82rem', color: '#059669', fontWeight: 700 }}>
+                                      Model Answer: {q.correctSubjectiveAnswer}
+                                    </div>
+                                  )}
+                                  {q.correctAnswerKeywords && (
+                                    <div style={{ fontSize: '0.82rem', color: '#0369a1', fontWeight: 700, marginTop: 4 }}>
+                                      Expected Keywords: {q.correctAnswerKeywords}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Grade inputs for this question */}
+                              {isMcq ? (
+                                /* MCQ: locked, auto-graded */
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f0fdf4', border: '1.5px solid #86efac', padding: '10px 14px', borderRadius: 6 }}>
+                                  <CheckCircle size={16} color="#166534" />
+                                  <span style={{ fontWeight: 900, fontSize: '0.82rem', color: '#166534', textTransform: 'uppercase' }}>
+                                    Auto-Graded: {feGradingScores[key] ?? 0} / {q.points} pts
+                                  </span>
+                                  <span style={{ fontSize: '0.75rem', color: '#4b5563', marginLeft: 4 }}>
+                                    (MCQ scores are evaluated automatically)
+                                  </span>
+                                </div>
+                              ) : (
+                                /* Subjective: editable */
+                                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12, background: '#f3f4f6', padding: 12, borderRadius: 6 }}>
+                                  <div>
+                                    <label style={{ fontWeight: 800, fontSize: '0.78rem', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                                      Marks (Max {q.points})
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={q.points}
+                                      value={feGradingScores[key] ?? 0}
+                                      onChange={e => setFeGradingScores(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+                                      className="neo-input"
+                                      style={{ width: '100%', fontWeight: 800 }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label style={{ fontWeight: 800, fontSize: '0.78rem', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                                      Question Feedback (Optional)
+                                    </label>
+                                    <input
+                                      value={feGradingFeedbacks[key] || ''}
+                                      onChange={e => setFeGradingFeedbacks(prev => ({ ...prev, [key]: e.target.value }))}
+                                      className="neo-input"
+                                      placeholder="Add feedback on this answer…"
+                                      style={{ width: '100%' }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Overall Feedback */}
+                  <div style={{ marginBottom: 24 }}>
+                    <label style={{ fontWeight: 900, fontSize: '0.88rem', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                      Overall Evaluator Feedback for Student
+                    </label>
+                    <textarea
+                      value={feOverallFeedback}
+                      onChange={e => setFeOverallFeedback(e.target.value)}
+                      className="neo-input"
+                      rows={3}
+                      placeholder="General comments on student performance…"
+                      style={{ width: '100%', resize: 'vertical' }}
+                    />
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                    <button onClick={() => setFeGradingModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '10px 20px' }}>Cancel</button>
+                    <button onClick={() => handleFeGradeSubmit(false)} disabled={feGradingSubmitting} className="neo-btn neo-btn-secondary" style={{ padding: '10px 20px', background: '#e5e7eb' }}>
+                      {feGradingSubmitting ? 'Saving…' : 'Save Draft Grade'}
+                    </button>
+                    <button onClick={() => handleFeGradeSubmit(true)} disabled={feGradingSubmitting} className="neo-btn neo-btn-accent" style={{ padding: '10px 24px' }}>
+                      {feGradingSubmitting ? 'Publishing…' : 'Save & Publish Result'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Regular Exams section ─────────────────────────────────────── */}
+            <div style={{ borderTop: '3px solid var(--border-color)', paddingTop: 32, marginTop: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <div>
+                  <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', textTransform: 'uppercase' }}>Regular Exams</h2>
+                  <p style={{ color: 'var(--text-muted)', marginTop: 4, fontSize: '0.85rem' }}>Individual subject exam modules</p>
+                </div>
+                <button onClick={handleOpenCreateExam} className="neo-btn" style={{ padding: '8px 16px' }}>
+                  <Plus size={16} /> Add Exam
+                </button>
+              </div>
+
             {error && (
               <div className="neo-card" style={{
                 backgroundColor: 'var(--danger)',
@@ -845,6 +1753,7 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                 <span>{error}</span>
               </div>
             )}
+
 
             {success && (
               <div className="neo-card" style={{
@@ -974,7 +1883,8 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
         {/* VIEW 2: MANAGE QUESTIONS (EXAM DETAIL) */}
         {currentView === 'QUESTIONS' && activeExam && (

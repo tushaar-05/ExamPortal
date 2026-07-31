@@ -13,6 +13,7 @@ import uploadRoutes from './routes/uploadRoutes';
 import studentRoutes from './routes/studentRoutes';
 import violationRoutes from './routes/violationRoutes';
 import feedbackRoutes from './routes/feedbackRoutes';
+import finalExamRoutes from './routes/finalExamRoutes';
 import { initAdminUser } from './controllers/authController';
 import { uploadsDir } from './utils/upload';
 
@@ -73,6 +74,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/violations', violationRoutes);
 app.use('/api/student', feedbackRoutes);
+app.use('/api', finalExamRoutes);
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {

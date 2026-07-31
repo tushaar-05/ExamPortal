@@ -15,11 +15,13 @@ model User {
   role        String   // 'ADMIN' | 'STUDENT' — validated in application code
   score       String?  @default("N/A")
   profilePic  String?  // URL to uploaded profile picture; null = use default
-  submissions ExamSubmission[]
-  attempts    ExamAttempt[]
-  feedbacks   Feedback[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  submissions         ExamSubmission[]
+  attempts            ExamAttempt[]
+  feedbacks           Feedback[]
+  finalExamSubmissions FinalExamSubmission[]
+  finalExamAttempts    FinalExamAttempt[]
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 type Option {
@@ -125,3 +127,107 @@ model Feedback {
   exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+// ─── Final Examination Module ─────────────────────────────────────────────────
+
+type FinalExamOption {
+  id       String
+  text     String
+  imageUrl String?
+}
+
+type FinalExamQuestion {
+  id                      String
+  text                    String
+  imageUrl                String?
+  difficulty              String   // 'EASY' | 'MEDIUM' | 'HARD'
+  points                  Int
+  type                    String   // 'MCQ' | 'SUBJECTIVE'
+  options                 FinalExamOption[]
+  correctOptionId         String?
+  correctSubjectiveAnswer String?
+  correctAnswerKeywords   String?
+}
+
+type FinalExamSubject {
+  id        String
+  name      String
+  questions FinalExamQuestion[]
+}
+
+type FinalExamAnswer {
+  questionId       String
+  subjectId        String
+  optionId         String?
+  subjectiveAnswer String?
+  pointsEarned     Int?
+  feedback         String?
+}
+
+model FinalExam {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  title              String
+  description        String?
+  instructions       String?
+  syllabus           String?
+  durationMinutes    Int
+  startTime          DateTime
+  endTime            DateTime
+  gracePeriodSeconds Int       @default(10)
+  passPercentage     Int       @default(40)
+  subjects           FinalExamSubject[]
+  submissions        FinalExamSubmission[]
+  attempts           FinalExamAttempt[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model FinalExamSubmission {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  finalExamId     String   @db.ObjectId
+  userId          String   @db.ObjectId
+  userName        String?
+  userEmail       String?
+  score           Int
+  totalPoints     Int
+  percentage      Float?
+  passed          Boolean?
+  answers         FinalExamAnswer[]
+  graded          Boolean? @default(false)
+  isPublished     Boolean? @default(false)
+  overallFeedback String?
+  createdAt       DateTime @default(now())
+
+  finalExam       FinalExam @relation(fields: [finalExamId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FinalExamAttempt {
+  id               String      @id @default(auto()) @map("_id") @db.ObjectId
+  finalExamId      String      @db.ObjectId
+  userId           String      @db.ObjectId
+  userName         String?
+  userEmail        String?
+  remainingChances Int         @default(3)
+  status           String      @default("STARTED") // 'STARTED' | 'SUBMITTED' | 'TERMINATED'
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  finalExam        FinalExam   @relation(fields: [finalExamId], references: [id], onDelete: Cascade)
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  violations       FinalExamViolation[]
+}
+
+model FinalExamViolation {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  attemptId String   @db.ObjectId
+  userId    String   @db.ObjectId
+  userName  String?
+  userEmail String?
+  type      String
+  timestamp DateTime @default(now())
+  metadata  String?
+
+  attempt   FinalExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+}
+

@@ -47,7 +47,7 @@ export const getStudentExams = async (req: AuthenticatedRequest, res: Response) 
       }
       
       const hasEndTime = !!exam.endTime;
-      const isBeforeDeadline = hasEndTime && now < new Date(exam.endTime);
+      const isBeforeDeadline = hasEndTime && now < new Date(exam.endTime!);
 
       return {
         id: exam.id,
@@ -306,7 +306,7 @@ export const submitExam = async (req: AuthenticatedRequest, res: Response) => {
     });
 
     const hasEndTime = !!exam.endTime;
-    const isBeforeDeadline = hasEndTime && new Date() < new Date(exam.endTime);
+    const isBeforeDeadline = hasEndTime && new Date() < new Date(exam.endTime!);
 
     return res.status(200).json({ 
       message: 'Exam submitted successfully',

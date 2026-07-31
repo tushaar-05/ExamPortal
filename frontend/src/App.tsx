@@ -16,6 +16,8 @@ import StudentSubjectScores from './pages/admin/StudentSubjectScores';
 import StudentScores from './pages/student/StudentScores';
 import ExamReview from './pages/student/ExamReview';
 import Leaderboard from './pages/student/Leaderboard';
+import FinalExamLobby from './pages/student/FinalExamLobby';
+import FinalExamResult from './pages/student/FinalExamResult';
 
 // Root catch-all: redirect based on auth state
 const NavigationRoot: React.FC = () => {
@@ -98,6 +100,8 @@ const AppContent: React.FC = () => {
       {/* ── Student protected routes ── */}
       <Route element={<ProtectedRoute allowedRoles={['STUDENT']} />}>
         <Route path="/student" element={<StudentDashboard />} />
+        <Route path="/student/final-exam/:id" element={<FinalExamLobby />} />
+        <Route path="/student/final-exam/:id/result" element={<FinalExamResult />} />
         <Route path="/student/exam/:id" element={<ExamSession />} />
         <Route path="/student/exam/:id/review" element={<ExamReview />} />
         <Route path="/student/scores" element={<StudentScores />} />

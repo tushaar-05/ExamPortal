@@ -20,6 +20,7 @@ interface Exam {
 const StudentDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const [exams, setExams] = useState<Exam[]>([]);
+  const [finalExam, setFinalExam] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,15 +28,20 @@ const StudentDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiFetch('/student/exams', {
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const [res1, res2] = await Promise.all([
+        apiFetch('/student/exams', { credentials: 'include' }),
+        apiFetch('/student/final-exam', { credentials: 'include' }),
+      ]);
+      if (res1.ok) {
+        const data = await res1.json();
         setExams(data.exams);
       } else {
-        const errData = await response.json();
+        const errData = await res1.json();
         setError(errData.message || 'Failed to load exam modules');
+      }
+      if (res2.ok) {
+        const data2 = await res2.json();
+        setFinalExam(data2.finalExam);
       }
     } catch (err) {
       console.error('Fetch exams error:', err);
@@ -158,6 +164,154 @@ const StudentDashboard: React.FC = () => {
             Error retrieving exam modules: {error}
           </div>
         )}
+
+        {/* ── FINAL EXAM PROMINENT BANNER ───────────────────────────────────── */}
+        {finalExam && (
+          <div className="neo-card" style={{
+            backgroundColor: '#1a1a1a',
+            color: '#ffffff',
+            marginBottom: '32px',
+            padding: '28px',
+            borderLeft: '10px solid var(--primary)',
+            boxShadow: 'var(--box-shadow)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ flex: 1, minWidth: '280px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <span style={{
+                    backgroundColor: finalExam.submitted ? '#dcfce7' : finalExam.status === 'LIVE' ? '#ef4444' : '#3b82f6',
+                    color: finalExam.submitted ? '#166534' : '#ffffff',
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    fontWeight: 900,
+                    fontSize: '0.75rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
+                  }}>
+                    {finalExam.submitted ? '✓ Submitted' : finalExam.status === 'LIVE' ? '🔴 Live Now' : finalExam.status === 'ENDED' ? '⏰ Ended' : '🗓 Upcoming'}
+                  </span>
+                  <span style={{ color: 'var(--primary)', fontWeight: 900, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Official Final Examination
+                  </span>
+                </div>
+
+                <h2 style={{ fontSize: '1.8rem', fontWeight: 900, margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '-0.02em', color: '#fff' }}>
+                  {finalExam.title}
+                </h2>
+
+                {finalExam.description && (
+                  <p style={{ color: '#d1d5db', margin: '0 0 16px 0', fontSize: '0.95rem' }}>
+                    {finalExam.description}
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.85rem', color: '#9ca3af', fontWeight: 700 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={15} color="var(--primary)" /> {finalExam.durationMinutes} Minutes
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <BookOpen size={15} color="var(--primary)" /> {finalExam.subjects?.length || 0} Subjects Included
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={15} color="var(--primary)" /> Starts: {new Date(finalExam.startTime).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Subject Pills */}
+                {finalExam.subjects?.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '16px' }}>
+                    {finalExam.subjects.map((sub: any) => (
+                      <span key={sub.id} style={{
+                        backgroundColor: '#374151',
+                        color: '#f9fafb',
+                        padding: '4px 10px',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem',
+                        fontWeight: 700
+                      }}>
+                        {sub.name} ({sub.questions?.length || 0} Qs)
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px', justifyContent: 'center' }}>
+                {finalExam.submitted ? (
+                  finalExam.isPublished ? (
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#9ca3af', fontWeight: 800, textTransform: 'uppercase' }}>RESULT PUBLISHED</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--primary)', marginBottom: '8px' }}>
+                        {finalExam.score}
+                      </div>
+                      <Link
+                        to={`/student/final-exam/${finalExam.id}/result`}
+                        className="neo-btn"
+                        style={{
+                          padding: '10px 20px',
+                          fontSize: '0.9rem',
+                          fontWeight: 900,
+                          backgroundColor: '#4ade80',
+                          color: '#064e3b',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '2px 2px 0px 0px #ffffff'
+                        }}
+                      >
+                        View Result & Analysis <ArrowRight size={16} />
+                      </Link>
+                    </div>
+                  ) : (
+                    <div style={{ maxWidth: '320px', backgroundColor: '#262626', border: '1.5px solid #f59e0b', borderRadius: '8px', padding: '14px', textAlign: 'left' }}>
+                      <div style={{ color: '#f59e0b', fontWeight: 900, fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        ⏳ Under Evaluation
+                      </div>
+                      <p style={{ margin: 0, fontSize: '0.82rem', color: '#d1d5db', lineHeight: 1.4 }}>
+                        Your exam has been submitted successfully. Results are currently under evaluation. They will be available here once the admin completes the grading process.
+                      </p>
+                    </div>
+                  )
+                ) : finalExam.status === 'ENDED' ? (
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      background: '#374151', border: '1.5px solid #6b7280',
+                      color: '#9ca3af', padding: '10px 18px', borderRadius: '6px',
+                      fontWeight: 900, fontSize: '0.9rem', textTransform: 'uppercase'
+                    }}>
+                      ⏰ Exam Ended
+                    </span>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '6px' }}>
+                      This exam has concluded and is no longer accessible.
+                    </div>
+                  </div>
+                ) : (
+                  <Link
+                    to={`/student/final-exam/${finalExam.id}`}
+                    className="neo-btn"
+                    style={{
+                      padding: '14px 28px',
+                      fontSize: '1rem',
+                      fontWeight: 900,
+                      backgroundColor: 'var(--primary)',
+                      color: '#1a1a1a',
+                      textDecoration: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '4px 4px 0px 0px #ffffff'
+                    }}
+                  >
+                    Enter Exam Hall <ArrowRight size={18} />
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
 
         {!loading && !error && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
