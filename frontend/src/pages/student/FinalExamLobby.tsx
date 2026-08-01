@@ -665,17 +665,16 @@ export const FinalExamLobby: React.FC = () => {
                     padding: '14px',
                     fontSize: '1rem',
                     fontWeight: 900,
-                    backgroundColor: canStart && cameraGranted && micGranted ? 'var(--primary)' : '#444',
+                    justifyContent: 'center',
+                    backgroundColor: canStart && cameraGranted && micGranted ? 'var(--primary)' : '#333',
                     color: canStart && cameraGranted && micGranted ? '#1a1a1a' : '#888',
                     cursor: canStart && cameraGranted && micGranted ? 'pointer' : 'not-allowed',
-                    justifyContent: 'center'
                   }}
                 >
-                  {!canStart ? 'Waiting for Start Time...' : 'Start Examination'}
+                  {canStart ? 'Enter Exam Hall' : 'Complete Setup First'}
                 </button>
               </div>
             </div>
-
           </div>
         </div>
       </div>
@@ -690,154 +689,297 @@ export const FinalExamLobby: React.FC = () => {
     const currentQuestion = currentSubject?.questions[activeQuestionIdx];
     const answerKey = `${currentSubject?.id}__${currentQuestion?.id}`;
     const selectedAnswer = answers[answerKey] || {};
+    const isLastQuestionInSubject = activeQuestionIdx === (currentSubject?.questions.length || 1) - 1;
+
+    // Calculate total questions & total answered across ALL subjects
+    const totalAllQuestions = exam.subjects.reduce((sum, s) => sum + s.questions.length, 0);
+    const totalAnsweredQuestions = exam.subjects.reduce((sum, s) => {
+      return sum + s.questions.filter(q => {
+        const k = `${s.id}__${q.id}`;
+        const ans = answers[k];
+        if (!ans) return false;
+        if (q.type === 'SUBJECTIVE') return (ans.subjectiveAnswer || '').trim().length > 0;
+        return !!ans.optionId;
+      }).length;
+    }, 0);
+    const overallProgressPct = totalAllQuestions > 0 ? Math.round((totalAnsweredQuestions / totalAllQuestions) * 100) : 0;
+
+    const handleSelectOption = (optId: string) => {
+      setAnswers(prev => ({ ...prev, [answerKey]: { optionId: optId } }));
+      if (!isLastQuestionInSubject) {
+        setTimeout(() => {
+          setActiveQuestionIdx(prev => prev + 1);
+        }, 350);
+      }
+    };
+
+    const handleClearSelection = () => {
+      setAnswers(prev => {
+        const next = { ...prev };
+        delete next[answerKey];
+        return next;
+      });
+    };
 
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', display: 'flex', flexDirection: 'column', fontFamily: 'sans-serif', userSelect: 'none' }}>
+      <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', fontFamily: 'Outfit, sans-serif', userSelect: 'none' }}>
 
-        {/* Exam Header */}
-        <header style={{ background: '#1a1a1a', color: '#fff', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '4px solid var(--primary)' }}>
+        {/* ══ TOP GLOBAL PROGRESS BAR ════════════════════════════════════════════ */}
+        <div style={{ height: '5px', backgroundColor: '#e2e8f0', width: '100%', position: 'relative' }}>
+          <div style={{
+            height: '100%',
+            width: `${overallProgressPct}%`,
+            backgroundColor: overallProgressPct === 100 ? '#10b981' : 'var(--primary)',
+            transition: 'width 0.4s ease'
+          }} />
+        </div>
+
+        {/* ══ STICKY EXAM HEADER ══════════════════════════════════════════════════ */}
+        <header style={{ background: '#111827', color: '#fff', padding: '12px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '4px solid var(--primary)', flexShrink: 0 }}>
           <div>
-            <span style={{ color: 'var(--primary)', fontWeight: 900, fontSize: '0.75rem', textTransform: 'uppercase' }}>OFFICIAL FINAL EXAMINATION</span>
-            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900 }}>{exam.title}</h2>
+            <span style={{ color: 'var(--primary)', fontWeight: 900, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              OFFICIAL FINAL EXAMINATION
+            </span>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, letterSpacing: '-0.01em' }}>{exam.title}</h2>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             {/* Remaining Chances Badge */}
-            <div style={{ background: '#262626', padding: '6px 14px', borderRadius: '6px', border: '1px solid #444', fontSize: '0.85rem', fontWeight: 800 }}>
+            <div style={{ background: '#1f2937', padding: '6px 14px', borderRadius: '6px', border: '1px solid #374151', fontSize: '0.82rem', fontWeight: 800 }}>
               Chances Left: <span style={{ color: remainingChances <= 1 ? '#ef4444' : '#4ade80' }}>{remainingChances} / 3</span>
             </div>
 
-            {/* Timer */}
-            <div style={{ background: 'var(--primary)', color: '#1a1a1a', padding: '8px 16px', borderRadius: '6px', fontWeight: 900, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Live Digital Timer */}
+            <div style={{
+              background: secondsRemaining < 300 ? '#ef4444' : 'var(--primary)',
+              color: secondsRemaining < 300 ? '#ffffff' : '#1a1a1a',
+              padding: '8px 18px',
+              borderRadius: '6px',
+              fontWeight: 900,
+              fontSize: '1.15rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              fontVariantNumeric: 'tabular-nums'
+            }}>
               <Clock size={18} /> {formatTime(secondsRemaining)}
             </div>
 
-            <button onClick={() => setShowSubmitModal(true)} className="neo-btn neo-btn-danger" style={{ padding: '8px 16px', fontWeight: 900 }}>
+            <button onClick={() => setShowSubmitModal(true)} className="neo-btn neo-btn-danger" style={{ padding: '8px 20px', fontWeight: 900, fontSize: '0.9rem' }}>
               Submit Exam
             </button>
           </div>
         </header>
 
-        {/* Subject Navigation Tabs */}
-        <div style={{ background: '#ffffff', borderBottom: '2px solid var(--border-color)', padding: '0 24px', display: 'flex', gap: '4px', overflowX: 'auto' }}>
+        {/* ══ MULTI-SUBJECT NAVIGATION TABS ══════════════════════════════════════ */}
+        <div style={{ background: '#ffffff', borderBottom: '2px solid #e2e8f0', padding: '0 28px', display: 'flex', gap: '6px', overflowX: 'auto', flexShrink: 0 }}>
           {exam.subjects.map((subj, idx) => {
             const isActive = idx === activeSubjectIdx;
-            const answeredCount = subj.questions.filter(q => !!answers[`${subj.id}__${q.id}`]).length;
+            const answeredInSubj = subj.questions.filter(q => {
+              const k = `${subj.id}__${q.id}`;
+              const ans = answers[k];
+              if (!ans) return false;
+              if (q.type === 'SUBJECTIVE') return (ans.subjectiveAnswer || '').trim().length > 0;
+              return !!ans.optionId;
+            }).length;
+
             return (
               <button
                 key={subj.id}
                 onClick={() => { setActiveSubjectIdx(idx); setActiveQuestionIdx(0); }}
                 style={{
-                  padding: '14px 24px',
+                  padding: '14px 22px',
                   fontWeight: 900,
                   fontSize: '0.9rem',
                   border: 'none',
                   borderBottom: isActive ? '4px solid var(--primary)' : '4px solid transparent',
-                  backgroundColor: isActive ? '#f9fafb' : 'transparent',
-                  color: isActive ? '#1a1a1a' : '#6b7280',
+                  backgroundColor: isActive ? '#f8fafc' : 'transparent',
+                  color: isActive ? '#0f172a' : '#64748b',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px'
+                  gap: '10px',
+                  transition: 'all 0.15s ease'
                 }}
               >
                 {subj.name}
-                <span style={{ background: isActive ? 'var(--primary)' : '#e5e7eb', color: '#1a1a1a', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem' }}>
-                  {answeredCount} / {subj.questions.length}
+                <span style={{
+                  background: isActive ? 'var(--primary)' : '#e2e8f0',
+                  color: '#0f172a',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontSize: '0.75rem',
+                  fontWeight: 900
+                }}>
+                  {answeredInSubj} / {subj.questions.length}
                 </span>
               </button>
             );
           })}
         </div>
 
-        {/* Main Content Area */}
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px', padding: '24px' }}>
+        {/* ══ TWO-COLUMN MAIN CONTENT AREA ═══════════════════════════════════════ */}
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px', padding: '24px', maxWidth: '1600px', margin: '0 auto', width: '100%', boxSizing: 'border-block-axis' as any }}>
 
-          {/* Question Display Panel */}
-          <div className="neo-card" style={{ background: '#fff', padding: '32px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          {/* LEFT MAIN QUESTION COLUMN */}
+          <div className="neo-card" style={{ background: '#ffffff', padding: '32px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderRadius: '12px' }}>
             {currentQuestion ? (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '16px', borderBottom: '2px solid #f3f4f6' }}>
-                  <span style={{ fontWeight: 900, fontSize: '0.9rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                    Question {activeQuestionIdx + 1} of {currentSubject.questions.length} ({currentSubject.name})
-                  </span>
+                {/* Meta Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '2px solid #f1f5f9' }}>
+                  <div>
+                    <span style={{ fontWeight: 900, fontSize: '0.78rem', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.06em' }}>
+                      Question {activeQuestionIdx + 1} of {currentSubject.questions.length} • {currentSubject.name}
+                    </span>
+                  </div>
+
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '4px', fontWeight: 800, fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                    <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '4px', fontWeight: 900, fontSize: '0.75rem', textTransform: 'uppercase' }}>
                       {currentQuestion.type}
                     </span>
-                    <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: '4px', fontWeight: 800, fontSize: '0.75rem' }}>
+                    <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: '4px', fontWeight: 900, fontSize: '0.75rem' }}>
                       {currentQuestion.points} Points
                     </span>
+
+                    <button
+                      onClick={() => setMarkedForReview(prev => ({ ...prev, [answerKey]: !prev[answerKey] }))}
+                      className={markedForReview[answerKey] ? 'neo-btn neo-btn-accent' : 'neo-btn neo-btn-secondary'}
+                      style={{ padding: '6px 14px', fontSize: '0.8rem', backgroundColor: markedForReview[answerKey] ? '#f59e0b' : '#fff' }}
+                    >
+                      {markedForReview[answerKey] ? '★ Marked' : '☆ Mark for Review'}
+                    </button>
+
+                    {currentQuestion.type === 'MCQ' && selectedAnswer.optionId && (
+                      <button
+                        onClick={handleClearSelection}
+                        className="neo-btn"
+                        style={{ padding: '6px 12px', fontSize: '0.8rem', backgroundColor: '#e2e8f0', boxShadow: 'none' }}
+                      >
+                        Clear Selection
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Question Text */}
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#111827', marginBottom: '24px', lineHeight: 1.5 }}>
+                {/* Question Statement */}
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginBottom: '24px', lineHeight: 1.6 }}>
                   {currentQuestion.text}
                 </h3>
 
                 {/* Question Image if present */}
                 {currentQuestion.imageUrl && (
-                  <img src={currentQuestion.imageUrl} alt="Question Diagram" style={{ maxWidth: '100%', maxHeight: '250px', borderRadius: '8px', marginBottom: '24px', border: '2px solid #e5e7eb' }} />
+                  <div style={{ marginBottom: '24px' }}>
+                    <img src={currentQuestion.imageUrl} alt="Question Diagram" style={{ maxWidth: '100%', maxHeight: '280px', borderRadius: '8px', border: '2px solid #e2e8f0', display: 'block' }} />
+                  </div>
                 )}
 
-                {/* Answer Inputs */}
+                {/* Answer Options / Response Input */}
                 {currentQuestion.type === 'MCQ' ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  /* SINGLE-CARD STACKED MCQ OPTIONS (Matching ExamSession.tsx UX) */
+                  <div style={{
+                    border: '2px solid var(--border-color)',
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    backgroundColor: '#ffffff',
+                    boxShadow: 'var(--box-shadow-sm)'
+                  }}>
                     {currentQuestion.options?.map((opt, optIdx) => {
                       const isSelected = selectedAnswer.optionId === opt.id;
+                      const letterLabel = String.fromCharCode(65 + optIdx);
                       return (
-                        <label
+                        <div
                           key={opt.id}
-                          onClick={() => setAnswers(prev => ({ ...prev, [answerKey]: { optionId: opt.id } }))}
+                          onClick={() => handleSelectOption(opt.id)}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '14px',
-                            padding: '16px 20px',
-                            borderRadius: '8px',
-                            border: `2px solid ${isSelected ? 'var(--primary)' : '#e5e7eb'}`,
-                            backgroundColor: isSelected ? '#fffbeb' : '#ffffff',
+                            gap: '16px',
+                            padding: '18px 20px',
+                            backgroundColor: isSelected ? 'var(--primary)' : '#ffffff',
+                            borderBottom: optIdx < (currentQuestion.options?.length || 0) - 1 ? '2px solid #e2e8f0' : 'none',
                             cursor: 'pointer',
-                            fontWeight: isSelected ? 800 : 600,
-                            transition: 'all 0.15s ease'
+                            transition: 'background 0.15s ease',
+                            userSelect: 'none'
                           }}
                         >
-                          <span style={{ width: '28px', height: '28px', minWidth: '28px', borderRadius: '50%', background: isSelected ? 'var(--primary)' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.85rem' }}>
-                            {String.fromCharCode(65 + optIdx)}
+                          {/* Letter Circle Badge */}
+                          <span style={{
+                            minWidth: '36px',
+                            height: '36px',
+                            borderRadius: '50%',
+                            backgroundColor: isSelected ? '#1a1a1a' : '#f1f5f9',
+                            color: isSelected ? 'var(--primary)' : '#0f172a',
+                            border: '2px solid var(--border-color)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 900,
+                            fontSize: '0.9rem'
+                          }}>
+                            {letterLabel}
                           </span>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
-                            <span style={{ fontSize: '1rem', color: '#1f2937' }}>{opt.text}</span>
+
+                          {/* Option text + image */}
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: '1.05rem', fontWeight: isSelected ? 900 : 600, color: '#0f172a' }}>
+                              {opt.text}
+                            </span>
                             {opt.imageUrl && (
-                              <img
-                                src={opt.imageUrl}
-                                alt={`Option ${String.fromCharCode(65 + optIdx)}`}
-                                style={{ maxHeight: '120px', maxWidth: '100%', borderRadius: '6px', border: '1px solid #e5e7eb', objectFit: 'contain' }}
-                              />
+                              <div style={{ marginTop: '8px' }}>
+                                <img
+                                  src={opt.imageUrl}
+                                  alt={`Option ${letterLabel}`}
+                                  style={{ maxHeight: '140px', maxWidth: '100%', borderRadius: '6px', border: '1.5px solid #cbd5e1', objectFit: 'contain' }}
+                                />
+                              </div>
                             )}
                           </div>
-                        </label>
+
+                          {/* Selected Checkmark */}
+                          {isSelected && (
+                            <CheckCircle size={22} color="#1a1a1a" style={{ flexShrink: 0 }} />
+                          )}
+                        </div>
                       );
                     })}
                   </div>
                 ) : (
+                  /* SUBJECTIVE TEXTAREA */
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <label style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', color: '#374151' }}>
-                        Your Response (Subjective)
-                      </label>
-                      <div style={{ fontSize: '0.78rem', color: '#6b7280', fontWeight: 700 }}>
-                        {selectedAnswer.subjectiveAnswer ? selectedAnswer.subjectiveAnswer.trim().split(/\s+/).filter(Boolean).length : 0} Words · {selectedAnswer.subjectiveAnswer ? selectedAnswer.subjectiveAnswer.length : 0} Characters
-                      </div>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 14px',
+                      backgroundColor: '#fffbeb',
+                      border: '2px solid #fde68a',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 800,
+                      color: '#92400e',
+                      marginBottom: '14px'
+                    }}>
+                      ✍️ Type your complete subjective response in the box below. Your answer will be reviewed and graded by the evaluator.
                     </div>
                     <textarea
                       value={selectedAnswer.subjectiveAnswer || ''}
                       onChange={e => setAnswers(prev => ({ ...prev, [answerKey]: { subjectiveAnswer: e.target.value } }))}
                       className="neo-input"
                       rows={9}
-                      placeholder="Type your detailed answer here. Structure your response clearly..."
-                      style={{ width: '100%', resize: 'vertical', fontSize: '1rem', padding: '16px', lineHeight: 1.6 }}
+                      placeholder="Type your detailed answer here..."
+                      style={{
+                        width: '100%',
+                        resize: 'vertical',
+                        fontSize: '1rem',
+                        padding: '18px',
+                        lineHeight: 1.6,
+                        boxSizing: 'border-box'
+                      }}
                     />
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 800, textAlign: 'right', marginTop: '6px' }}>
+                      {selectedAnswer.subjectiveAnswer ? selectedAnswer.subjectiveAnswer.trim().split(/\s+/).filter(Boolean).length : 0} Words · {selectedAnswer.subjectiveAnswer ? selectedAnswer.subjectiveAnswer.length : 0} Characters
+                    </div>
                   </div>
                 )}
               </div>
@@ -846,190 +988,164 @@ export const FinalExamLobby: React.FC = () => {
             )}
 
             {/* Bottom Nav Controls */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '32px', paddingTop: '20px', borderTop: '2px solid #f3f4f6' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '32px', paddingTop: '20px', borderTop: '2px solid #f1f5f9' }}>
               <button
                 disabled={activeQuestionIdx === 0}
                 onClick={() => setActiveQuestionIdx(prev => prev - 1)}
                 className="neo-btn neo-btn-secondary"
-                style={{ padding: '10px 20px', opacity: activeQuestionIdx === 0 ? 0.5 : 1 }}
+                style={{ padding: '10px 22px', opacity: activeQuestionIdx === 0 ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 Previous
               </button>
 
-              <button
-                onClick={() => setMarkedForReview(prev => ({ ...prev, [answerKey]: !prev[answerKey] }))}
-                className="neo-btn neo-btn-accent"
-                style={{ padding: '10px 20px', backgroundColor: markedForReview[answerKey] ? '#f59e0b' : '#fff' }}
-              >
-                {markedForReview[answerKey] ? '★ Marked for Review' : '☆ Mark for Review'}
-              </button>
+              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#64748b' }}>
+                Question {activeQuestionIdx + 1} of {currentSubject?.questions.length}
+              </div>
 
               <button
-                disabled={activeQuestionIdx === currentSubject.questions.length - 1}
-                onClick={() => setActiveQuestionIdx(prev => prev + 1)}
+                disabled={isLastQuestionInSubject && activeSubjectIdx === exam.subjects.length - 1}
+                onClick={() => {
+                  if (isLastQuestionInSubject) {
+                    if (activeSubjectIdx < exam.subjects.length - 1) {
+                      setActiveSubjectIdx(prev => prev + 1);
+                      setActiveQuestionIdx(0);
+                    }
+                  } else {
+                    setActiveQuestionIdx(prev => prev + 1);
+                  }
+                }}
                 className="neo-btn"
-                style={{ padding: '10px 24px', opacity: activeQuestionIdx === currentSubject.questions.length - 1 ? 0.5 : 1 }}
+                style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                Next Question <ChevronRight size={16} />
+                {isLastQuestionInSubject ? 'Next Subject' : 'Next Question'} <ChevronRight size={16} />
               </button>
             </div>
           </div>
 
-          {/* Right Question Palette */}
-          <div className="neo-card" style={{ background: '#fff', padding: '24px', height: 'fit-content' }}>
-            <h4 style={{ margin: '0 0 16px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.9rem' }}>Question Palette</h4>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', marginBottom: '24px' }}>
-              {currentSubject?.questions.map((q, qIdx) => {
-                const key = `${currentSubject.id}__${q.id}`;
-                const isAns = !!answers[key];
-                const isMfr = !!markedForReview[key];
-                const isCurrent = qIdx === activeQuestionIdx;
-
-                let bg = '#f3f4f6';
-                let color = '#374151';
-                if (isAns) { bg = '#dcfce7'; color = '#166534'; }
-                if (isMfr) { bg = '#fef3c7'; color = '#92400e'; }
-                if (isCurrent) { bg = 'var(--primary)'; color = '#1a1a1a'; }
-
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => setActiveQuestionIdx(qIdx)}
-                    style={{
-                      height: '40px',
-                      borderRadius: '6px',
-                      border: isCurrent ? '2px solid #1a1a1a' : '1px solid #d1d5db',
-                      backgroundColor: bg,
-                      color,
-                      fontWeight: 900,
-                      cursor: 'pointer',
-                      fontSize: '0.85rem'
-                    }}
-                  >
-                    {qIdx + 1}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Legend */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.8rem', fontWeight: 700, borderTop: '2px solid #f3f4f6', paddingTop: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'var(--primary)', border: '1px solid #1a1a1a' }}></span> Current
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '14px', height: '14px', borderRadius: '3px', background: '#dcfce7', border: '1px solid #166534' }}></span> Answered
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '14px', height: '14px', borderRadius: '3px', background: '#fef3c7', border: '1px solid #92400e' }}></span> Marked for Review
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* ── ENHANCED LIVE CAMERA PREVIEW + AUDIO LEVEL OVERLAY ─────────────────────── */}
-        <div style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          zIndex: 9998,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-          gap: '8px',
-          transition: 'all 0.25s ease'
-        }}>
-          {cameraMinimized ? (
-            /* Minimized Pill View */
-            <button
-              onClick={() => setCameraMinimized(false)}
-              title="Expand Camera Proctoring Feed"
-              style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '50%',
-                backgroundColor: '#1a1a1a',
-                border: '3px solid var(--primary)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                position: 'relative'
-              }}
-            >
-              <Camera size={24} color="var(--primary)" />
-              <span style={{ position: 'absolute', top: '2px', right: '2px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ef4444', border: '2px solid #1a1a1a' }} />
-            </button>
-          ) : (
-            /* Expanded Bigger Proctoring Card (250x155px video) */
-            <div style={{
-              width: '260px',
-              backgroundColor: '#18181b',
-              border: '2px solid var(--border-color)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
-              color: '#fff'
-            }}>
-              {/* Overlay Top Bar */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#09090b', borderBottom: '1px solid #27272a' }}>
+          {/* RIGHT SIDEBAR COLUMN (Proctoring + Progress + Palette) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: 'fit-content' }}>
+            
+            {/* 1. Camera Proctoring Box */}
+            <div className="neo-card" style={{ background: '#111827', color: '#fff', padding: '16px', borderRadius: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444', animation: 'pulse 1.5s infinite' }} />
-                  <span style={{ fontSize: '0.7rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#f43f5e' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 900, textTransform: 'uppercase', color: '#f43f5e', letterSpacing: '0.05em' }}>
                     PROCTORING LIVE
                   </span>
                 </div>
                 <button
-                  onClick={() => setCameraMinimized(true)}
-                  title="Minimize camera overlay"
-                  style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 }}
+                  onClick={() => setCameraMinimized(prev => !prev)}
+                  style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}
                 >
-                  <Minimize2 size={14} />
+                  {cameraMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
                 </button>
               </div>
 
-              {/* Bigger Camera Video Feed */}
-              <div style={{ position: 'relative', width: '100%', height: '155px', backgroundColor: '#000' }}>
-                <video
-                  ref={(el) => {
-                    examVideoRef.current = el;
-                    if (el && mediaStreamRef.current && el.srcObject !== mediaStreamRef.current) {
-                      el.srcObject = mediaStreamRef.current;
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
-                />
+              {!cameraMinimized && (
+                <>
+                  <div style={{ position: 'relative', width: '100%', height: '155px', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px', border: '2px solid #374151' }}>
+                    <video
+                      ref={(el) => {
+                        examVideoRef.current = el;
+                        if (el && mediaStreamRef.current && el.srcObject !== mediaStreamRef.current) {
+                          el.srcObject = mediaStreamRef.current;
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+                    />
+                  </div>
+
+                  {/* Mic Meter */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Mic size={12} color="var(--primary)" /> Mic Input</span>
+                      <span style={{ color: micLevel > 60 ? '#ef4444' : micLevel > 30 ? '#f59e0b' : '#4ade80' }}>{micLevel}%</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', backgroundColor: '#374151', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${micLevel}%`,
+                        backgroundColor: micLevel > 60 ? '#ef4444' : micLevel > 30 ? '#f59e0b' : '#4ade80',
+                        borderRadius: '3px',
+                        transition: 'width 0.1s ease'
+                      }} />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 2. Overall Progress Overview */}
+            <div className="neo-card" style={{ background: '#ffffff', padding: '20px', borderRadius: '12px' }}>
+              <h4 style={{ margin: '0 0 10px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.85rem' }}>Exam Progress</h4>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>
+                <span>{totalAnsweredQuestions} Answered</span>
+                <span>{totalAllQuestions - totalAnsweredQuestions} Remaining</span>
+              </div>
+              <div style={{ height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${overallProgressPct}%`, backgroundColor: overallProgressPct === 100 ? '#10b981' : 'var(--primary)', transition: 'width 0.3s ease' }} />
+              </div>
+            </div>
+
+            {/* 3. Question Palette Grid */}
+            <div className="neo-card" style={{ background: '#ffffff', padding: '24px', borderRadius: '12px' }}>
+              <h4 style={{ margin: '0 0 16px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.88rem' }}>Question Palette ({currentSubject?.name})</h4>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', marginBottom: '24px' }}>
+                {currentSubject?.questions.map((q, qIdx) => {
+                  const key = `${currentSubject.id}__${q.id}`;
+                  const ans = answers[key];
+                  const isAns = q.type === 'SUBJECTIVE' ? (ans?.subjectiveAnswer || '').trim().length > 0 : !!ans?.optionId;
+                  const isMfr = !!markedForReview[key];
+                  const isCurrent = qIdx === activeQuestionIdx;
+
+                  let bg = '#f1f5f9';
+                  let color = '#334155';
+                  if (isAns) { bg = '#dcfce7'; color = '#166534'; }
+                  if (isMfr) { bg = '#fef3c7'; color = '#92400e'; }
+                  if (isCurrent) { bg = 'var(--primary)'; color = '#1a1a1a'; }
+
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => setActiveQuestionIdx(qIdx)}
+                      style={{
+                        height: '42px',
+                        borderRadius: '6px',
+                        border: isCurrent ? '2.5px solid #0f172a' : '1px solid #cbd5e1',
+                        backgroundColor: bg,
+                        color,
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        fontSize: '0.88rem'
+                      }}
+                    >
+                      {qIdx + 1}
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Live Mic Level Bar */}
-              <div style={{ padding: '8px 12px', backgroundColor: '#18181b' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#a1a1aa', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Mic size={12} color="var(--primary)" /> Mic Input
-                  </span>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 900, color: micLevel > 60 ? '#ef4444' : micLevel > 30 ? '#f59e0b' : '#4ade80' }}>
-                    {micLevel}%
-                  </span>
+              {/* Palette Legend */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.78rem', fontWeight: 800, borderTop: '2px solid #f1f5f9', paddingTop: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'var(--primary)', border: '1px solid #0f172a' }}></span> Current Question
                 </div>
-                <div style={{ width: '100%', height: '6px', backgroundColor: '#27272a', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${micLevel}%`,
-                    backgroundColor: micLevel > 60 ? '#ef4444' : micLevel > 30 ? '#f59e0b' : '#4ade80',
-                    borderRadius: '3px',
-                    transition: 'width 0.1s ease'
-                  }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '14px', height: '14px', borderRadius: '3px', background: '#dcfce7', border: '1px solid #166534' }}></span> Answered
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '14px', height: '14px', borderRadius: '3px', background: '#fef3c7', border: '1px solid #92400e' }}></span> Marked for Review
                 </div>
               </div>
             </div>
-          )}
+
+          </div>
+
         </div>
 
         {/* ── PROCTORING WARNING / GRACE PERIOD COUNTDOWN MODAL ─────────────── */}
