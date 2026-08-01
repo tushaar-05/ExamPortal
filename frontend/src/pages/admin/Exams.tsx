@@ -24,7 +24,8 @@ import {
   ChevronUp,
   Clock,
   Calendar,
-  Send
+  Send,
+  XCircle
 } from 'lucide-react';
 
 
