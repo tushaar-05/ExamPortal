@@ -1831,19 +1831,30 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
 
                               {/* Student Answer & Options View */}
                               {isMcq ? (
-                                <div style={{ marginBottom: 14, background: '#f9fafb', padding: 12, borderRadius: 6 }}>
-                                  <div style={{ fontSize: '0.82rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>MCQ Options:</div>
+                                <div style={{ marginBottom: 14, background: '#f9fafb', padding: 12, borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                    <div style={{ fontSize: '0.82rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>MCQ Options:</div>
+                                    {!origAns?.optionId && (
+                                      <span style={{ background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: 4, fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>
+                                        — Student Skipped Question
+                                      </span>
+                                    )}
+                                  </div>
                                   {q.options?.map((opt: FinalExamOption) => {
                                     const isCorrect = opt.id === q.correctOptionId;
                                     const isSelected = origAns?.optionId === opt.id;
                                     return (
                                       <div key={opt.id} style={{
                                         display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 4, marginBottom: 4,
-                                        background: isCorrect ? '#dcfce7' : isSelected ? '#fee2e2' : 'transparent',
-                                        border: isCorrect ? '1px solid #166534' : isSelected ? '1px solid #ef4444' : '1px solid transparent',
+                                        background: isSelected && isCorrect ? '#dcfce7' : isCorrect ? '#f0fdf4' : isSelected ? '#fee2e2' : 'transparent',
+                                        border: isSelected && isCorrect ? '1px solid #166534' : isCorrect ? '1px dashed #22c55e' : isSelected ? '1px solid #ef4444' : '1px solid transparent',
                                         fontWeight: isSelected || isCorrect ? 800 : 500, fontSize: '0.85rem'
                                       }}>
-                                        <span>{isCorrect ? '✓ [Correct]' : isSelected ? '✗ [Student Picked]' : '•'}</span>
+                                        <span>
+                                          {isSelected && isCorrect ? '✓ [Student Picked - Correct]' :
+                                           isCorrect ? '✓ [Correct Answer]' :
+                                           isSelected ? '✗ [Student Picked - Incorrect]' : '•'}
+                                        </span>
                                         <span>{opt.text}</span>
                                         {opt.imageUrl && <img src={opt.imageUrl} alt="Option" style={{ height: 28, borderRadius: 4 }} />}
                                       </div>
@@ -1872,15 +1883,27 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                               {/* Grade inputs for this question */}
                               {isMcq ? (
                                 /* MCQ: locked, auto-graded */
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f0fdf4', border: '1.5px solid #86efac', padding: '10px 14px', borderRadius: 6 }}>
-                                  <CheckCircle size={16} color="#166534" />
-                                  <span style={{ fontWeight: 900, fontSize: '0.82rem', color: '#166534', textTransform: 'uppercase' }}>
-                                    Auto-Graded: {feGradingScores[key] ?? 0} / {q.points} pts
-                                  </span>
-                                  <span style={{ fontSize: '0.75rem', color: '#4b5563', marginLeft: 4 }}>
-                                    (MCQ scores are evaluated automatically)
-                                  </span>
-                                </div>
+                                (() => {
+                                  const pointsEarned = feGradingScores[key] ?? 0;
+                                  const isSkipped = !origAns?.optionId;
+                                  const isCorrect = pointsEarned > 0;
+
+                                  const bg = isCorrect ? '#f0fdf4' : isSkipped ? '#f8fafc' : '#fef2f2';
+                                  const borderColor = isCorrect ? '#86efac' : isSkipped ? '#cbd5e1' : '#fca5a5';
+                                  const textColor = isCorrect ? '#166534' : isSkipped ? '#475569' : '#991b1b';
+
+                                  return (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: bg, border: `1.5px solid ${borderColor}`, padding: '10px 14px', borderRadius: 6 }}>
+                                      {isCorrect ? <CheckCircle size={16} color={textColor} /> : isSkipped ? <AlertCircle size={16} color={textColor} /> : <XCircle size={16} color={textColor} />}
+                                      <span style={{ fontWeight: 900, fontSize: '0.82rem', color: textColor, textTransform: 'uppercase' }}>
+                                        Auto-Graded: {pointsEarned} / {q.points} pts {isSkipped ? '(Skipped)' : !isCorrect ? '(Incorrect)' : '(Correct)'}
+                                      </span>
+                                      <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: 'auto' }}>
+                                        MCQs are evaluated automatically
+                                      </span>
+                                    </div>
+                                  );
+                                })()
                               ) : (
                                 /* Subjective: editable */
                                 <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12, background: '#f3f4f6', padding: 12, borderRadius: 6 }}>
