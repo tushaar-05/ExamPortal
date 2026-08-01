@@ -98,6 +98,7 @@ interface FinalExam {
   startTime: string;
   endTime: string;
   gracePeriodSeconds: number;
+  passPercentage?: number | null;
   subjects: FinalExamSubject[];
   createdAt: string;
 }
