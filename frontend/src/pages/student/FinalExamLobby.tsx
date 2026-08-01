@@ -273,6 +273,52 @@ export const FinalExamLobby: React.FC = () => {
     return () => clearInterval(timer);
   }, [phase]);
 
+  // 5b. Silent Random-Interval Proctoring Snapshots
+  useEffect(() => {
+    if (phase !== 'EXAM' || !exam?.id) return;
+
+    let snapshotTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const captureAndUpload = async () => {
+      try {
+        // Prefer in-exam overlay video, fallback to lobby video
+        const video = examVideoRef.current || videoRef.current;
+        if (!video || video.readyState < 2 || video.videoWidth === 0) return;
+
+        // Draw frame onto a canvas at reduced quality to keep payload small (~60-80KB)
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 240;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL('image/jpeg', 0.5); // 50% quality JPEG
+
+        // Fire & forget — don't await or show errors to student
+        apiFetch(`/student/final-exam/${exam.id}/snapshot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageData }),
+          credentials: 'include',
+        }).catch(() => { /* silently ignore upload failures */ });
+      } catch {
+        // never surface errors to student
+      }
+
+      // Schedule next snapshot at a random interval between 45–120 seconds
+      const nextDelay = Math.floor(Math.random() * (120_000 - 45_000 + 1)) + 45_000;
+      snapshotTimeout = setTimeout(captureAndUpload, nextDelay);
+    };
+
+    // Take first snapshot after a random delay of 20–60 seconds
+    const firstDelay = Math.floor(Math.random() * (60_000 - 20_000 + 1)) + 20_000;
+    snapshotTimeout = setTimeout(captureAndUpload, firstDelay);
+
+    return () => {
+      if (snapshotTimeout) clearTimeout(snapshotTimeout);
+    };
+  }, [phase, exam?.id]);
+
   // 6. Enhanced Proctoring Violation with Grace Period Countdown
   const triggerViolationGracePeriod = useCallback(() => {
     if (phase !== 'EXAM' || isSubmittingRef.current || showGraceModal) return;

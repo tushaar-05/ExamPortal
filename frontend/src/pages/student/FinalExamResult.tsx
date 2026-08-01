@@ -37,7 +37,7 @@ interface QuestionAnalysis {
   type: 'MCQ' | 'SUBJECTIVE';
   points: number;
   pointsEarned: number;
-  status: 'CORRECT' | 'INCORRECT' | 'PARTIAL';
+  status: 'CORRECT' | 'INCORRECT' | 'PARTIAL' | 'SKIPPED';
   options: QuestionOption[];
   correctOptionId?: string | null;
   correctAnswerText?: string | null;
@@ -277,9 +277,22 @@ export const FinalExamResult: React.FC = () => {
             {filteredQuestions.map((q, idx) => {
               const isMcq = q.type === 'MCQ';
               const statusBadgeStyle = {
-                background: q.status === 'CORRECT' ? '#dcfce7' : q.status === 'PARTIAL' ? '#fef3c7' : '#fee2e2',
-                color: q.status === 'CORRECT' ? '#166534' : q.status === 'PARTIAL' ? '#92400e' : '#991b1b',
-                border: `1.5px solid ${q.status === 'CORRECT' ? '#166534' : q.status === 'PARTIAL' ? '#92400e' : '#ef4444'}`,
+                background:
+                  q.status === 'CORRECT' ? '#dcfce7' :
+                  q.status === 'PARTIAL' ? '#fef3c7' :
+                  q.status === 'SKIPPED' ? '#f1f5f9' :
+                  '#fee2e2',
+                color:
+                  q.status === 'CORRECT' ? '#166534' :
+                  q.status === 'PARTIAL' ? '#92400e' :
+                  q.status === 'SKIPPED' ? '#64748b' :
+                  '#991b1b',
+                border: `1.5px solid ${
+                  q.status === 'CORRECT' ? '#166534' :
+                  q.status === 'PARTIAL' ? '#92400e' :
+                  q.status === 'SKIPPED' ? '#94a3b8' :
+                  '#ef4444'
+                }`,
                 padding: '4px 12px',
                 borderRadius: '6px',
                 fontWeight: 900,
@@ -287,8 +300,15 @@ export const FinalExamResult: React.FC = () => {
                 textTransform: 'uppercase' as const,
               };
 
+              // Left border color for the card
+              const cardBorderLeft =
+                q.status === 'CORRECT' ? '4px solid #22c55e' :
+                q.status === 'PARTIAL' ? '4px solid #f59e0b' :
+                q.status === 'SKIPPED' ? '4px solid #94a3b8' :
+                '4px solid #ef4444';
+
               return (
-                <div key={q.questionId} style={{ border: '2px solid var(--border-color)', borderRadius: '8px', padding: '24px', background: '#fafafa' }}>
+                <div key={q.questionId} style={{ border: '2px solid var(--border-color)', borderLeft: cardBorderLeft, borderRadius: '8px', padding: '24px', background: q.status === 'SKIPPED' ? '#f8fafc' : '#fafafa' }}>
                   
                   {/* Top Bar */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
@@ -303,7 +323,10 @@ export const FinalExamResult: React.FC = () => {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span style={statusBadgeStyle}>
-                        {q.status === 'CORRECT' ? '✓ Correct' : q.status === 'PARTIAL' ? '⚠ Partial' : '✗ Incorrect'}
+                        {q.status === 'CORRECT' ? '✓ Correct' :
+                         q.status === 'PARTIAL' ? '⚠ Partial' :
+                         q.status === 'SKIPPED' ? '— Skipped' :
+                         '✗ Incorrect'}
                       </span>
                       <span style={{ fontWeight: 900, fontSize: '0.9rem' }}>
                         {q.pointsEarned} / {q.points} Points

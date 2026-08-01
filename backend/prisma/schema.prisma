@@ -231,3 +231,12 @@ model FinalExamViolation {
   attempt   FinalExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
 }
 
+model ProctoringSnapshot {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  finalExamId String   @db.ObjectId
+  userId      String   @db.ObjectId
+  userName    String?
+  userEmail   String?
+  imageData   String   // base64-encoded JPEG
+  capturedAt  DateTime @default(now())
+}

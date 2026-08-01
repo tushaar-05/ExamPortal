@@ -653,8 +653,10 @@ export const studentGetFinalExamResult = async (req: AuthenticatedRequest, res: 
         const studentAns = submission.answers.find((a: any) => a.questionId === q.id && a.subjectId === subj.id);
         const pointsEarned = studentAns?.pointsEarned || 0;
 
-        let status: 'CORRECT' | 'INCORRECT' | 'PARTIAL' = 'INCORRECT';
-        if (pointsEarned === q.points && q.points > 0) status = 'CORRECT';
+        let status: 'CORRECT' | 'INCORRECT' | 'PARTIAL' | 'SKIPPED' = 'INCORRECT';
+        if (!studentAns || (!studentAns.optionId && !studentAns.subjectiveAnswer)) {
+          status = 'SKIPPED';
+        } else if (pointsEarned === q.points && q.points > 0) status = 'CORRECT';
         else if (pointsEarned > 0) status = 'PARTIAL';
 
         // Safe correct answer info
@@ -710,3 +712,70 @@ export const studentGetFinalExamResult = async (req: AuthenticatedRequest, res: 
   }
 };
 
+// ─── Proctoring Snapshots ─────────────────────────────────────────────────────
+
+// POST /api/student/final-exam/:id/snapshot — save a webcam snapshot silently
+export const studentSaveProctoringSnapshot = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const { id: finalExamId } = req.params;
+    const { imageData } = req.body;
+
+    if (!imageData || typeof imageData !== 'string') {
+      return res.status(400).json({ message: 'imageData is required' });
+    }
+
+    // Limit snapshot size (~1MB base64 max) to avoid mongo document size issues
+    if (imageData.length > 1_400_000) {
+      return res.status(400).json({ message: 'Snapshot too large' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+
+    await (prisma as any).proctoringSnapshot.create({
+      data: {
+        finalExamId,
+        userId,
+        userName: user?.name || null,
+        userEmail: user?.email || null,
+        imageData,
+      },
+    });
+
+    return res.status(201).json({ message: 'Snapshot saved' });
+  } catch (err) {
+    console.error('Error saving proctoring snapshot:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// GET /api/admin/final-exam/:id/snapshots?userId=... — fetch snapshots for a student
+export const adminGetProctoringSnapshots = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id: finalExamId } = req.params;
+    const { userId } = req.query;
+
+    const where: any = { finalExamId };
+    if (userId && typeof userId === 'string') where.userId = userId;
+
+    const snapshots = await (prisma as any).proctoringSnapshot.findMany({
+      where,
+      orderBy: { capturedAt: 'asc' },
+      select: {
+        id: true,
+        userId: true,
+        userName: true,
+        userEmail: true,
+        imageData: true,
+        capturedAt: true,
+      },
+    });
+
+    return res.status(200).json({ snapshots });
+  } catch (err) {
+    console.error('Error fetching proctoring snapshots:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};

@@ -222,6 +222,9 @@ const Exams: React.FC = () => {
   const [feOverallFeedback, setFeOverallFeedback] = useState('');
   const [feGradingSubmitting, setFeGradingSubmitting] = useState(false);
   const [feGradingSubjectIdx, setFeGradingSubjectIdx] = useState(0);
+  const [feSnapshots, setFeSnapshots] = useState<any[]>([]);
+  const [feSnapshotsLoading, setFeSnapshotsLoading] = useState(false);
+  const [feSnapshotLightbox, setFeSnapshotLightbox] = useState<string | null>(null);
 
   const toLocalDt = (iso: string | null | undefined) => {
     if (!iso) return '';
@@ -369,7 +372,7 @@ const Exams: React.FC = () => {
     }
   };
 
-  const handleOpenFeGradingModal = (sub: any) => {
+  const handleOpenFeGradingModal = async (sub: any) => {
     setFeActiveSubmission(sub);
     const scores: Record<string, number> = {};
     const feedbacks: Record<string, string> = {};
@@ -384,7 +387,31 @@ const Exams: React.FC = () => {
     setFeGradingFeedbacks(feedbacks);
     setFeOverallFeedback(sub.overallFeedback || '');
     setFeGradingSubjectIdx(0);
+    setFeSnapshotLightbox(null);
     setFeGradingModalOpen(true);
+
+    // Fetch proctoring snapshots for this student
+    const examId = finalExam?.id || sub.finalExamId;
+    const studentUserId = sub.userId || sub.user?.id;
+    if (examId && studentUserId) {
+      setFeSnapshotsLoading(true);
+      setFeSnapshots([]);
+      try {
+        const res = await apiFetch(`/admin/final-exam/${examId}/snapshots?userId=${studentUserId}`, { credentials: 'include' });
+        const data = await res.json();
+        if (res.ok) {
+          setFeSnapshots(data.snapshots || []);
+        } else {
+          console.warn('Snapshot fetch failed:', data.message);
+        }
+      } catch (err) {
+        console.warn('Snapshot fetch error:', err);
+      } finally {
+        setFeSnapshotsLoading(false);
+      }
+    } else {
+      console.warn('Missing examId or userId for snapshot fetch', { examId, studentUserId, sub });
+    }
   };
 
   const handleFeGradeSubmit = async (isPublishing: boolean) => {
@@ -1891,6 +1918,55 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                       </div>
                     );
                   })()}
+
+                  {/* ── Proctoring Snapshots Gallery ── */}
+                  <div style={{ marginBottom: 28, background: '#0f172a', borderRadius: 10, padding: 20 }}>
+                    <h4 style={{ margin: '0 0 14px', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.85rem', color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', backgroundColor: '#ef4444', boxShadow: '0 0 6px #ef4444', animation: 'pulse 1s infinite' }} />
+                      Proctoring Snapshots
+                      {!feSnapshotsLoading && <span style={{ fontWeight: 400, fontSize: '0.75rem', color: '#94a3b8', marginLeft: 4 }}>({feSnapshots.length} captured)</span>}
+                    </h4>
+                    {feSnapshotsLoading ? (
+                      <div style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 700 }}>Loading snapshots…</div>
+                    ) : feSnapshots.length === 0 ? (
+                      <div style={{ color: '#64748b', fontSize: '0.85rem' }}>No snapshots captured yet for this student.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+                        {feSnapshots.map((snap: any) => (
+                          <div
+                            key={snap.id}
+                            onClick={() => setFeSnapshotLightbox(snap.imageData)}
+                            style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', border: '2px solid #1e293b', position: 'relative', transition: 'transform 0.15s' }}
+                            onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
+                            onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                          >
+                            <img
+                              src={snap.imageData}
+                              alt={`Snapshot at ${new Date(snap.capturedAt).toLocaleTimeString()}`}
+                              style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }}
+                            />
+                            <div style={{ background: 'rgba(0,0,0,0.7)', color: '#e2e8f0', fontSize: '0.6rem', fontWeight: 700, textAlign: 'center', padding: '2px 4px' }}>
+                              {new Date(snap.capturedAt).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lightbox */}
+                  {feSnapshotLightbox && (
+                    <div
+                      onClick={() => setFeSnapshotLightbox(null)}
+                      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
+                    >
+                      <img src={feSnapshotLightbox} alt="Snapshot" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 10, border: '4px solid #fff' }} />
+                      <button
+                        onClick={() => setFeSnapshotLightbox(null)}
+                        style={{ position: 'absolute', top: 24, right: 24, background: '#fff', border: 'none', borderRadius: '50%', width: 40, height: 40, fontSize: '1.2rem', fontWeight: 900, cursor: 'pointer' }}
+                      >×</button>
+                    </div>
+                  )}
 
                   {/* Overall Feedback */}
                   <div style={{ marginBottom: 24 }}>

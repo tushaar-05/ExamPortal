@@ -14,6 +14,8 @@ import {
   studentSubmitFinalExam,
   studentLogFinalExamViolation,
   studentGetFinalExamResult,
+  studentSaveProctoringSnapshot,
+  adminGetProctoringSnapshots,
 } from '../controllers/finalExamController';
 
 const router = Router();
@@ -27,6 +29,7 @@ router.delete('/admin/final-exam/:id', authenticateUser, authorizeRoles('ADMIN')
 router.get('/admin/final-exam/:id/submissions', authenticateUser, authorizeRoles('ADMIN'), adminGetFinalExamSubmissions);
 router.put('/admin/final-exam/submissions/:submissionId/grade', authenticateUser, authorizeRoles('ADMIN'), adminGradeFinalExamSubmission);
 router.put('/admin/final-exam/:id/publish', authenticateUser, authorizeRoles('ADMIN'), adminPublishFinalExamResults);
+router.get('/admin/final-exam/:id/snapshots', authenticateUser, authorizeRoles('ADMIN'), adminGetProctoringSnapshots);
 
 // ── Student routes ────────────────────────────────────────────────────────────
 router.get('/student/final-exam', authenticateUser, studentGetFinalExam);
@@ -34,6 +37,8 @@ router.get('/student/final-exam/:id/result', authenticateUser, studentGetFinalEx
 router.post('/student/final-exam/:id/start', authenticateUser, studentStartFinalExam);
 router.post('/student/final-exam/:id/submit', authenticateUser, studentSubmitFinalExam);
 router.post('/student/final-exam/:id/violation', authenticateUser, studentLogFinalExamViolation);
+router.post('/student/final-exam/:id/snapshot', authenticateUser, studentSaveProctoringSnapshot);
 
 export default router;
+
 
