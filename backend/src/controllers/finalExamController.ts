@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { getTrustedTime } from '../utils/time';
 
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
@@ -18,45 +19,46 @@ const finalExamQuestionSchema = z.object({
   difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
   points: z.number().min(0),
   type: z.enum(['MCQ', 'SUBJECTIVE']),
-  options: z.array(finalExamOptionSchema).optional().nullable(),
+  options: z.array(finalExamOptionSchema).optional(),
   correctOptionId: z.string().nullable().optional(),
   correctSubjectiveAnswer: z.string().nullable().optional(),
   correctAnswerKeywords: z.string().nullable().optional(),
-}).refine((data) => {
-  if (data.type === 'MCQ') {
-    return (data.options && data.options.length >= 2) &&
-      (data.correctOptionId && data.correctOptionId.trim() !== '');
-  }
-  return true;
-}, { message: 'MCQ questions require at least 2 options and a correct option.', path: ['options'] });
+});
 
 const finalExamSubjectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
-  questions: z.array(finalExamQuestionSchema).default([]),
+  questions: z.array(finalExamQuestionSchema),
 });
 
 const createFinalExamSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
+  title: z.string().min(1),
   description: z.string().nullable().optional(),
   instructions: z.string().nullable().optional(),
   syllabus: z.string().nullable().optional(),
   durationMinutes: z.number().min(1),
   startTime: z.string().datetime({ offset: true }),
   endTime: z.string().datetime({ offset: true }),
-  gracePeriodSeconds: z.number().min(5).max(60).default(10),
-  subjects: z.array(finalExamSubjectSchema).default([]),
+  gracePeriodSeconds: z.number().min(0).optional(),
+  passPercentage: z.number().min(0).max(100).optional(),
+  subjects: z.array(finalExamSubjectSchema).min(1),
 });
 
-const updateFinalExamSchema = createFinalExamSchema.partial().extend({
-  title: z.string().min(1, 'Title is required').optional(),
+const updateFinalExamSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  instructions: z.string().nullable().optional(),
+  syllabus: z.string().nullable().optional(),
+  durationMinutes: z.number().min(1).optional(),
   startTime: z.string().datetime({ offset: true }).optional(),
   endTime: z.string().datetime({ offset: true }).optional(),
+  gracePeriodSeconds: z.number().min(0).optional(),
+  passPercentage: z.number().min(0).max(100).optional(),
+  subjects: z.array(finalExamSubjectSchema).optional(),
 });
 
-// ─── Admin: CRUD ──────────────────────────────────────────────────────────────
+// ─── Admin: Final Exam CRUD ───────────────────────────────────────────────────
 
-// GET /api/admin/final-exam — list all final exams
 export const adminGetFinalExams = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const finalExams = await prisma.finalExam.findMany({
@@ -69,7 +71,6 @@ export const adminGetFinalExams = async (req: AuthenticatedRequest, res: Respons
   }
 };
 
-// GET /api/admin/final-exam/:id
 export const adminGetFinalExamById = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -82,7 +83,6 @@ export const adminGetFinalExamById = async (req: AuthenticatedRequest, res: Resp
   }
 };
 
-// POST /api/admin/final-exam
 export const adminCreateFinalExam = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const data = createFinalExamSchema.parse(req.body);
@@ -90,7 +90,7 @@ export const adminCreateFinalExam = async (req: AuthenticatedRequest, res: Respo
     const startDt = new Date(data.startTime);
     const endDt = new Date(data.endTime);
     if (endDt <= startDt) {
-      return res.status(400).json({ message: 'End time must be after start time.' });
+      return res.status(400).json({ message: 'End time must be after start time' });
     }
 
     const finalExam = await prisma.finalExam.create({
@@ -102,12 +102,13 @@ export const adminCreateFinalExam = async (req: AuthenticatedRequest, res: Respo
         durationMinutes: data.durationMinutes,
         startTime: startDt,
         endTime: endDt,
-        gracePeriodSeconds: data.gracePeriodSeconds,
+        gracePeriodSeconds: data.gracePeriodSeconds ?? 10,
+        passPercentage: data.passPercentage ?? 40,
         subjects: data.subjects as any,
       },
     });
 
-    return res.status(201).json({ message: 'Final exam created successfully', finalExam });
+    return res.status(201).json({ finalExam });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ errors: err.errors.map(e => e.message) });
@@ -117,19 +118,19 @@ export const adminCreateFinalExam = async (req: AuthenticatedRequest, res: Respo
   }
 };
 
-// PUT /api/admin/final-exam/:id
 export const adminUpdateFinalExam = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const data = updateFinalExamSchema.parse(req.body);
+
     const existing = await prisma.finalExam.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ message: 'Final exam not found' });
 
-    const data = updateFinalExamSchema.parse(req.body);
-
     const startDt = data.startTime ? new Date(data.startTime) : existing.startTime;
     const endDt = data.endTime ? new Date(data.endTime) : existing.endTime;
+
     if (endDt <= startDt) {
-      return res.status(400).json({ message: 'End time must be after start time.' });
+      return res.status(400).json({ message: 'End time must be after start time' });
     }
 
     const updated = await prisma.finalExam.update({
@@ -143,11 +144,12 @@ export const adminUpdateFinalExam = async (req: AuthenticatedRequest, res: Respo
         startTime: startDt,
         endTime: endDt,
         gracePeriodSeconds: data.gracePeriodSeconds ?? existing.gracePeriodSeconds,
-        subjects: data.subjects !== undefined ? (data.subjects as any) : (existing.subjects as any),
+        passPercentage: data.passPercentage ?? existing.passPercentage,
+        subjects: data.subjects ? (data.subjects as any) : (existing.subjects as any),
       },
     });
 
-    return res.status(200).json({ message: 'Final exam updated successfully', finalExam: updated });
+    return res.status(200).json({ finalExam: updated });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ errors: err.errors.map(e => e.message) });
@@ -157,13 +159,9 @@ export const adminUpdateFinalExam = async (req: AuthenticatedRequest, res: Respo
   }
 };
 
-// DELETE /api/admin/final-exam/:id
 export const adminDeleteFinalExam = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const existing = await prisma.finalExam.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ message: 'Final exam not found' });
-
     await prisma.finalExam.delete({ where: { id } });
     return res.status(200).json({ message: 'Final exam deleted successfully' });
   } catch (err) {
@@ -172,7 +170,6 @@ export const adminDeleteFinalExam = async (req: AuthenticatedRequest, res: Respo
   }
 };
 
-// GET /api/admin/final-exam/:id/submissions
 export const adminGetFinalExamSubmissions = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -197,7 +194,6 @@ export const adminGetFinalExamSubmissions = async (req: AuthenticatedRequest, re
 
 // ─── Student: Access ──────────────────────────────────────────────────────────
 
-// GET /api/student/final-exam — returns the most recent FinalExam with student status
 export const studentGetFinalExam = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -209,24 +205,31 @@ export const studentGetFinalExam = async (req: AuthenticatedRequest, res: Respon
 
     if (!finalExam) return res.status(200).json({ finalExam: null });
 
-    const now = new Date();
+    const now = await getTrustedTime();
     let examStatus: 'UPCOMING' | 'LIVE' | 'ENDED' = 'UPCOMING';
     if (now >= finalExam.startTime && now <= finalExam.endTime) examStatus = 'LIVE';
     else if (now > finalExam.endTime) examStatus = 'ENDED';
 
-    // Check student's submission
+    // Check student's submission & attempt
     const submission = await prisma.finalExamSubmission.findFirst({
       where: { finalExamId: finalExam.id, userId },
     });
 
-    // Strip correct answers from subjects
+    const existingAttempt = await prisma.finalExamAttempt.findFirst({
+      where: { finalExamId: finalExam.id, userId, status: 'STARTED' },
+    });
+
+    // Security: Only send questions if exam is LIVE/ENDED or if student has an existing attempt/submission
+    const canSeeQuestions = (now >= finalExam.startTime) || !!existingAttempt || !!submission;
+
+    // Strip correct answers from subjects (and hide questions completely if UPCOMING)
     const safeSubjects = (finalExam.subjects as any[]).map((subject: any) => ({
       id: subject.id,
       name: subject.name,
-      questions: (subject.questions as any[]).map((q: any) => {
+      questions: canSeeQuestions ? (subject.questions as any[]).map((q: any) => {
         const { correctOptionId, correctSubjectiveAnswer, correctAnswerKeywords, ...safe } = q;
         return safe;
-      }),
+      }) : [],
     }));
 
     const isPublished = submission?.isPublished ?? false;
@@ -242,6 +245,7 @@ export const studentGetFinalExam = async (req: AuthenticatedRequest, res: Respon
         durationMinutes: finalExam.durationMinutes,
         startTime: finalExam.startTime,
         endTime: finalExam.endTime,
+        serverTime: now.toISOString(),
         gracePeriodSeconds: finalExam.gracePeriodSeconds,
         passPercentage: finalExam.passPercentage || 40,
         subjects: safeSubjects,
@@ -255,6 +259,7 @@ export const studentGetFinalExam = async (req: AuthenticatedRequest, res: Respon
               : 'Under Evaluation')
           : null,
       },
+      serverTime: now.toISOString(),
     });
   } catch (err) {
     console.error('Error fetching final exam for student:', err);
@@ -262,7 +267,6 @@ export const studentGetFinalExam = async (req: AuthenticatedRequest, res: Respon
   }
 };
 
-// POST /api/student/final-exam/:id/start — create or fetch attempt
 export const studentStartFinalExam = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -272,7 +276,7 @@ export const studentStartFinalExam = async (req: AuthenticatedRequest, res: Resp
     const finalExam = await prisma.finalExam.findUnique({ where: { id } });
     if (!finalExam) return res.status(404).json({ message: 'Final exam not found' });
 
-    const now = new Date();
+    const now = await getTrustedTime();
     if (now < finalExam.startTime) {
       return res.status(403).json({ message: 'The exam has not started yet.' });
     }

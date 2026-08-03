@@ -108,6 +108,10 @@ export const FinalExamLobby: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any | null>(null);
 
+  // Server time tracking (monotonic via performance.now to prevent OS clock tampering)
+  const serverTimeRef = useRef<number | null>(null);
+  const perfTimeRef = useRef<number | null>(null);
+
   // 1. Fetch Exam details
   const fetchFinalExam = useCallback(async () => {
     setLoading(true);
@@ -118,6 +122,11 @@ export const FinalExamLobby: React.FC = () => {
         const data = await res.json();
         if (data.finalExam && data.finalExam.id === id) {
           setExam(data.finalExam);
+          const serverTimeIso = data.serverTime || data.finalExam.serverTime;
+          if (serverTimeIso) {
+            serverTimeRef.current = new Date(serverTimeIso).getTime();
+            perfTimeRef.current = performance.now();
+          }
           if (data.finalExam.submitted) {
             setPhase('SUBMITTED');
           }
@@ -203,14 +212,20 @@ export const FinalExamLobby: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // 3. Lobby Countdown Timer to start time
+  // 3. Lobby Countdown Timer to start time (Server-Time Monotonic Sync)
   useEffect(() => {
     if (!exam || phase === 'EXAM' || phase === 'SUBMITTED') return;
 
     const interval = setInterval(() => {
-      const now = new Date().getTime();
+      // Compute authoritative server time using performance.now() elapsed offset
+      let currentServerTime = Date.now();
+      if (serverTimeRef.current !== null && perfTimeRef.current !== null) {
+        const elapsed = performance.now() - perfTimeRef.current;
+        currentServerTime = serverTimeRef.current + elapsed;
+      }
+
       const start = new Date(exam.startTime).getTime();
-      const diff = start - now;
+      const diff = start - currentServerTime;
 
       if (diff <= 0) {
         setCanStart(true);
@@ -246,9 +261,13 @@ export const FinalExamLobby: React.FC = () => {
         setAttemptId(data.attemptId);
         setRemainingChances(data.remainingChances);
         setSecondsRemaining((exam?.durationMinutes || 60) * 60);
+        // Refetch exam data to unlock questions from server if they were hidden in upcoming state
+        fetchFinalExam();
         setPhase('EXAM');
       } else {
         alert(data.message || 'Could not start exam.');
+        setCanStart(false);
+        fetchFinalExam();
       }
     } catch {
       alert('Network error while starting exam.');
@@ -612,13 +631,13 @@ export const FinalExamLobby: React.FC = () => {
             {/* Left Column: Instructions & Syllabus & Countdown */}
             <div>
               {/* Waiting Room Countdown Card */}
-              <div style={{ background: '#1e1e1e', border: '2px solid var(--primary)', borderRadius: '12px', padding: '24px', marginBottom: '24px', textAlign: 'center' }}>
-                <Clock size={36} color="var(--primary)" style={{ margin: '0 auto 12px' }} />
-                <h3 style={{ textTransform: 'uppercase', fontWeight: 900, margin: '0 0 8px', letterSpacing: '0.05em' }}>
-                  {canStart ? 'Exam is Live Now!' : 'Exam Starts In'}
+              <div style={{ background: '#1e1e1e', border: `2px solid ${exam.status === 'LIVE' ? 'var(--primary)' : '#444'}`, borderRadius: '12px', padding: '24px', marginBottom: '24px', textAlign: 'center' }}>
+                <Clock size={36} color={exam.status === 'LIVE' ? 'var(--primary)' : '#aaa'} style={{ margin: '0 auto 12px' }} />
+                <h3 style={{ textTransform: 'uppercase', fontWeight: 900, margin: '0 0 8px', letterSpacing: '0.05em', color: exam.status === 'LIVE' ? '#fff' : '#fbbf24' }}>
+                  {exam.status === 'LIVE' ? 'Exam is Live Now!' : 'Exam Starts In'}
                 </h3>
 
-                {canStart ? (
+                {exam.status === 'LIVE' ? (
                   <div style={{ color: '#4ade80', fontSize: '1.2rem', fontWeight: 900, margin: '12px 0 20px' }}>
                     🟢 The examination has begun. Complete your checks to enter.
                   </div>
@@ -626,7 +645,11 @@ export const FinalExamLobby: React.FC = () => {
                   <div style={{ fontSize: '2.8rem', fontWeight: 900, fontFamily: 'monospace', color: 'var(--primary)', letterSpacing: '2px', margin: '12px 0 20px' }}>
                     {String(timeUntilStart.hours).padStart(2, '0')}:{String(timeUntilStart.minutes).padStart(2, '0')}:{String(timeUntilStart.seconds).padStart(2, '0')}
                   </div>
-                ) : null}
+                ) : (
+                  <div style={{ color: '#fbbf24', fontSize: '1.1rem', fontWeight: 800, margin: '12px 0 20px' }}>
+                    🗓 Scheduled — Waiting for official start time
+                  </div>
+                )}
 
                 <div style={{ fontSize: '0.85rem', color: '#888' }}>
                   Fixed Time Schedule: <strong>{new Date(exam.startTime).toLocaleString()}</strong> to <strong>{new Date(exam.endTime).toLocaleString()}</strong>
@@ -639,10 +662,12 @@ export const FinalExamLobby: React.FC = () => {
                   <FileText size={20} /> Examination Instructions
                 </h3>
                 <div style={{ color: '#ccc', lineHeight: 1.7, fontSize: '0.95rem', whiteSpace: 'pre-line' }}>
-                  {exam.instructions || `1. Maintain continuous camera and microphone access.
-2. Full Screen mode is mandatory. Exiting full screen will trigger a proctoring warning.
-3. You have a 10-second grace period to return to full screen if interrupted.
-4. All subjects must be attempted within the combined duration limit.`}
+                  {exam.instructions || `1. Continuous webcam and microphone monitoring is enforced.
+2. The system will capture random snapshots through your webcam at intervals during the examination for identity verification and proctoring purposes.
+3. Full Screen mode is strictly mandatory throughout the exam duration.
+4. Exiting full screen will trigger a 20-second grace countdown timer.
+5. You are allowed a maximum of 3 proctoring violation chances. Exceeding 3 chances will automatically submit your exam.
+6. All subjects must be completed within the combined fixed duration.`}
                 </div>
               </div>
 
@@ -702,23 +727,33 @@ export const FinalExamLobby: React.FC = () => {
                 </div>
 
                 {/* Launch Button */}
-                <button
-                  onClick={handleStartExam}
-                  disabled={!canStart || !cameraGranted || !micGranted}
-                  className="neo-btn"
-                  style={{
-                    width: '100%',
-                    padding: '14px',
-                    fontSize: '1rem',
-                    fontWeight: 900,
-                    justifyContent: 'center',
-                    backgroundColor: canStart && cameraGranted && micGranted ? 'var(--primary)' : '#333',
-                    color: canStart && cameraGranted && micGranted ? '#1a1a1a' : '#888',
-                    cursor: canStart && cameraGranted && micGranted ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  {canStart ? 'Enter Exam Hall' : 'Complete Setup First'}
-                </button>
+                {(() => {
+                  const isLive = exam.status === 'LIVE';
+                  const isReady = isLive && cameraGranted && micGranted;
+                  return (
+                    <button
+                      onClick={handleStartExam}
+                      disabled={!isReady}
+                      className="neo-btn"
+                      style={{
+                        width: '100%',
+                        padding: '14px',
+                        fontSize: '1rem',
+                        fontWeight: 900,
+                        justifyContent: 'center',
+                        backgroundColor: isReady ? 'var(--primary)' : '#333',
+                        color: isReady ? '#1a1a1a' : '#888',
+                        cursor: isReady ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      {!isLive
+                        ? 'Exam Has Not Started Yet'
+                        : !cameraGranted || !micGranted
+                        ? 'Complete Setup First'
+                        : 'Enter Exam Hall'}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </div>

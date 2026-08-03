@@ -71,7 +71,7 @@ export const getStudentExams = async (req: AuthenticatedRequest, res: Response) 
       };
     });
 
-    return res.status(200).json({ exams: formattedExams });
+    return res.status(200).json({ exams: formattedExams, serverTime: new Date().toISOString() });
   } catch (err) {
     console.error('Error fetching student exams:', err);
     return res.status(500).json({ message: 'Internal server error' });
@@ -131,12 +131,14 @@ export const getExamForSession = async (req: AuthenticatedRequest, res: Response
     const now = new Date();
     if (exam.startTime && now < exam.startTime) {
       return res.status(403).json({
-        message: `This exam has not started yet. It will be available from ${exam.startTime.toLocaleString()}.`
+        message: `This exam has not started yet. It will be available from ${exam.startTime.toLocaleString()}.`,
+        serverTime: now.toISOString()
       });
     }
     if (exam.endTime && now > exam.endTime) {
       return res.status(403).json({
-        message: `This exam has ended. The window closed on ${exam.endTime.toLocaleString()}.`
+        message: `This exam has ended. The window closed on ${exam.endTime.toLocaleString()}.`,
+        serverTime: now.toISOString()
       });
     }
 
@@ -158,7 +160,8 @@ export const getExamForSession = async (req: AuthenticatedRequest, res: Response
     return res.status(200).json({
       exam: safeExam,
       attemptId: attempt.id,
-      remainingChances: attempt.remainingChances
+      remainingChances: attempt.remainingChances,
+      serverTime: now.toISOString()
     });
   } catch (err) {
     console.error('Error fetching exam for session:', err);
